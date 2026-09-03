@@ -21,6 +21,7 @@ class RoundRecord:
     confidence_after: float = 0.0
     new_boxes: list[str] = field(default_factory=list)
     conflicts: list[str] = field(default_factory=list)
+    searches: list[dict] = field(default_factory=list)  # [{objective, queries}]
     next_action: str = ""
     at: float = field(default_factory=time.time)
 

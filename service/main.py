@@ -183,6 +183,8 @@ def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
                 "text": rows[i]["text"][:800],
                 "citation": _cite(rows[i]),
                 "url": rows[i].get("url", ""),
+                "image_url": rows[i].get("image_url", ""),
+                "modality": rows[i].get("modality", "text"),
                 "source": rows[i].get("source", "parallel"),
             }
             for i in order

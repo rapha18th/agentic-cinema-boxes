@@ -35,7 +35,8 @@ def on_event(ev: dict) -> None:
         for q in ev["queries"]:
             print(f"          q: {q}")
     elif t == "extract":
-        print(f"  extract {ev['objective']}: {ev['sources']} sources")
+        imgs = f", {ev['images']} images" if ev.get("images") else ""
+        print(f"  extract {ev['objective']}: {ev['sources']} sources{imgs}")
     elif t == "coverage":
         print(f"  -> {ev['summary']}")
     elif t == "emergent_gap":
@@ -79,11 +80,15 @@ def main() -> None:
             print(f"      A: {v.a_cite}")
             print(f"      B: {v.b_cite}")
 
+    n_img = sum(1 for e in proj.evidence if e.modality == "image")
+    print(f"\nMULTIMODAL: {n_img} images embedded alongside {len(proj.evidence) - n_img} text fragments")
+
     print("\nREFERENCE REEL")
     for b in reel.build_reel(premise, proj.evidence):
         print(f"  {b.t}  {b.title} — {b.note}")
-        for c in b.citations[:3]:
-            print(f"         {c}")
+        for s in b.sources[:3]:
+            kind = "IMG " if s["modality"] == "image" else ""
+            print(f"         {kind}{s['cite']}  {s['url'] or s['image_url']}")
 
 
 if __name__ == "__main__":
