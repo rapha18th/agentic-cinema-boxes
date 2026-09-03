@@ -189,7 +189,7 @@ def extract(
 # ----------------------------------------------------------------------------- #
 _JUNK = ("logo", "icon", "sprite", "avatar", "button", "1x1", "spacer", "pixel",
          "placeholder", "loading", "blank", "/emoji", "favicon", "badge")
-_UA = {"User-Agent": "the-boxes-research/0.1 (+https://helenia-11f98.web.app)"}
+_UA = {"User-Agent": "the-boxes-research/0.1"}
 
 
 def _get_html(page_url: str, timeout: float = 8.0) -> str:

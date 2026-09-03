@@ -32,8 +32,8 @@ from boxes.evidence import Evidence  # noqa: E402
 import auth  # noqa: E402
 import store  # noqa: E402
 
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "helenia-11f98")
-BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", "helenia-11f98.firebasestorage.app")
+PROJECT_ID = os.environ["GOOGLE_CLOUD_PROJECT"]  # required
+BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", f"{PROJECT_ID}.firebasestorage.app")
 
 store.init(PROJECT_ID, BUCKET)
 

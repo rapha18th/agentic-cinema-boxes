@@ -12,16 +12,17 @@ try:
 except Exception:
     pass
 
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "helenia-11f98")
+PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "")  # set in .env
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
 USE_VERTEX = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
 
 # Vertex serves Gemini 3.x and Gemini Embedding 2 on the "global" location.
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", USE_VERTEX)
-os.environ.setdefault("GOOGLE_CLOUD_PROJECT", PROJECT)
+if PROJECT:
+    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", PROJECT)
 os.environ.setdefault("GOOGLE_CLOUD_LOCATION", LOCATION)
 
-BUCKET = os.environ.get("BOXES_BUCKET", "helenia-11f98-boxes")
+BUCKET = os.environ.get("BOXES_BUCKET") or (f"{PROJECT}-boxes" if PROJECT else "")
 EMBED_MODEL = os.environ.get("BOXES_EMBED_MODEL", "gemini-embedding-2")
 CHAT_MODEL = os.environ.get("BOXES_CHAT_MODEL", "gemini-3.8-flash")
 AGENT_SA = os.environ.get("BOXES_AGENT_SA", "")
