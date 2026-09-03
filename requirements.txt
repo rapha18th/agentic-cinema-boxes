@@ -1,0 +1,11 @@
+google-adk==2.8.0
+google-genai>=2.20.0
+google-cloud-aiplatform>=1.165.0
+google-cloud-storage>=3.13.0
+google-cloud-secret-manager>=2.30.0
+fastapi>=0.141.0
+uvicorn>=0.52.0
+httpx>=0.28.0
+numpy>=2.0.0
+pydantic>=2.10.0
+python-dotenv>=1.0.0
