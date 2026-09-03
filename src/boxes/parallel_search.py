@@ -1,22 +1,34 @@
 """Parallel Search API client.
 
-This is the partner integration for the hackathon Parallel track. The Search API
-call sits on the agent's hot path and must run on every research pass.
+Partner integration for the hackathon Parallel track. The Search API call sits on
+the agent's hot path and runs on every research pass.
 
-The exact request and response shape is not pinned here. Confirm against the
-Parallel Search API reference, then adjust `search()` and `_parse`. Until a key
-is available, `search()` falls back to a clearly labelled stub so the rest of
-the pipeline can be built and tested.
+Contract (Parallel Search API, v1):
+  POST https://api.parallel.ai/v1/search
+  headers: x-api-key, Content-Type: application/json
+  body:   {"objective": str, "search_queries": [str, ...], "mode": "advanced"|"fast"|"turbo"}
+  resp:   {"search_id", "results": [{"url", "title", "publish_date", "excerpts": [str]}],
+           "warnings", "usage", "session_id"}
+
+The Search API returns text excerpts and URLs. Images for the multimodal index
+come from the director's own references and from fetching result pages, not from
+this call.
 """
 
 from __future__ import annotations
 
-import os
+import re
 from dataclasses import dataclass
 
 import httpx
 
 from . import config
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _clean(s: str) -> str:
+    return _TAG.sub("", s).replace("\xa0", " ").strip()
 
 
 @dataclass
@@ -24,34 +36,47 @@ class SearchHit:
     title: str
     url: str
     text: str
+    publish_date: str | None = None
     image_url: str | None = None
     source: str = "parallel"
 
 
 def _parse(payload: dict) -> list[SearchHit]:
-    # TODO: align with the real Parallel Search response schema.
-    items = payload.get("results") or payload.get("data") or []
     hits: list[SearchHit] = []
-    for it in items:
+    for it in payload.get("results", []):
+        excerpts = it.get("excerpts") or []
         hits.append(
             SearchHit(
-                title=it.get("title", ""),
+                title=_clean(it.get("title", "")),
                 url=it.get("url", ""),
-                text=it.get("text") or it.get("snippet") or it.get("content", ""),
-                image_url=it.get("image_url") or it.get("image"),
+                text=_clean("\n\n".join(excerpts)),
+                publish_date=it.get("publish_date"),
             )
         )
     return hits
 
 
-def search(query: str, *, max_results: int = 10, timeout: float = 30.0) -> list[SearchHit]:
+def search(
+    query: str,
+    *,
+    objective: str | None = None,
+    extra_queries: list[str] | None = None,
+    mode: str = "fast",
+    max_results: int = 10,
+    timeout: float = 45.0,
+) -> list[SearchHit]:
     key = config.parallel_api_key()
     if not key:
         return _stub(query, max_results)
+    body = {
+        "objective": objective or query,
+        "search_queries": [query, *(extra_queries or [])],
+        "mode": mode,
+    }
     resp = httpx.post(
         config.PARALLEL_SEARCH_URL,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"query": query, "max_results": max_results},
+        headers={"x-api-key": key, "Content-Type": "application/json"},
+        json=body,
         timeout=timeout,
     )
     resp.raise_for_status()
