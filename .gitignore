@@ -7,3 +7,7 @@ data/*.json
 data/cache/
 *.log
 .DS_Store
+
+.adk/
+*.out
+*.err

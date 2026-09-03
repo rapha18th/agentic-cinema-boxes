@@ -51,7 +51,7 @@ def embed_texts(
     """Embed a batch of strings. The 3,072 output is pre-normalized; shorter
     cuts are normalized here so every vector is unit length."""
     out: list[list[float]] = []
-    for t in texts:
+    for t in list(texts):
         r = client().models.embed_content(
             model=config.EMBED_MODEL,
             contents=(prefix + t) if prefix else t,
