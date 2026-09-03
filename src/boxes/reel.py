@@ -21,6 +21,7 @@ class ReelBeat:
     note: str         # what the beat shows
     evidence_ids: list[str]
     citations: list[str]
+    sources: list[dict]  # [{cite, url, image_url, modality, license_note}]
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -35,13 +36,15 @@ EVIDENCE (id — citation — snippet):
 {catalog}
 
 Group the evidence into 4 to 6 beats that move from establishing the world to its
-texture and mood. Return JSON: a list of objects with keys "t" (timecode like
-"00:18", starting at "00:00"), "title" (2-4 words), "note" (one sentence),
-"evidence_ids" (list of ids that belong in this beat)."""
+texture and mood. Where an [image] item fits a beat, include it. Return JSON: a
+list of objects with keys "t" (timecode like "00:18", starting at "00:00"),
+"title" (2-4 words), "note" (one sentence), "evidence_ids" (list of ids)."""
 
 
-def build_reel(premise: str, evidence: list[Evidence], *, limit: int = 24) -> list[ReelBeat]:
-    pool = evidence[:limit]
+def build_reel(premise: str, evidence: list[Evidence], *, limit: int = 28) -> list[ReelBeat]:
+    imgs = [e for e in evidence if e.modality == "image"]
+    txt = [e for e in evidence if e.modality != "image"]
+    pool = (txt[: limit - min(len(imgs), 10)] + imgs[:10])[:limit]
     catalog = "\n".join(f"{e.id} — {e.cite()} — {e.text[:140]}" for e in pool)
     raw = llm.generate_json(_PROMPT.format(premise=premise, catalog=catalog))
     by_id = {e.id: e for e in pool}
@@ -55,6 +58,16 @@ def build_reel(premise: str, evidence: list[Evidence], *, limit: int = 24) -> li
                 note=str(item.get("note", "")).strip(),
                 evidence_ids=ids,
                 citations=[by_id[i].cite() for i in ids],
+                sources=[
+                    {
+                        "cite": by_id[i].cite(),
+                        "url": by_id[i].url,
+                        "image_url": by_id[i].image_url,
+                        "modality": by_id[i].modality,
+                        "license_note": by_id[i].license_note,
+                    }
+                    for i in ids
+                ],
             )
         )
     return beats

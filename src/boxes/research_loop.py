@@ -49,10 +49,17 @@ class ResearchProject:
         return self.reports[-1].confidence if self.reports else 0.0
 
     def _add_evidence(self, items: list[Evidence]) -> int:
-        fresh = [e for e in items if all(e.id != x.id for x in self.evidence)]
+        seen = {x.id for x in self.evidence}
+        fresh = [e for e in items if e.id not in seen]
         if not fresh:
             return 0
-        vecs = np.asarray(embed_texts([e.text for e in fresh], dim=768), dtype=np.float32)
+        # images carry their own picture+caption vector; text is batch-embedded
+        need = [e for e in fresh if e.vector is None]
+        if need:
+            got = embed_texts([e.text for e in need], dim=768)
+            for e, v in zip(need, got):
+                e.vector = v
+        vecs = np.asarray([e.vector for e in fresh], dtype=np.float32)
         self.vectors = vecs if self.vectors is None else np.vstack([self.vectors, vecs])
         self.evidence.extend(fresh)
         return len(fresh)
@@ -127,21 +134,27 @@ def _do_round(
         confidence_before=before.confidence if before else 0.0,
     )
 
+    per_obj_images = max(1, d.images_per_round // max(1, len(targets))) if d.images_per_round else 0
     for obj in targets:
         queries = ontology.objective_queries(obj, proj.premise, k=d.queries_per_objective)
         on_event({"type": "search", "objective": obj.name, "queries": queries})
+        rec.searches.append({"objective": obj.name, "queries": queries})
         found = ps.research(
             obj.description or obj.name,
             queries,
             objective_id=obj.id,
             extract_urls=d.extract_urls,
             full_content=d.full_content,
+            round_no=run_no,
+            harvest_images_limit=per_obj_images,
         )
-        on_event({"type": "extract", "objective": obj.name, "sources": len(found)})
+        n_img = sum(1 for e in found if e.modality == "image")
+        on_event({"type": "extract", "objective": obj.name, "sources": len(found) - n_img, "images": n_img})
         added = proj._add_evidence(found)
-        rec.sources_examined += len(found)
+        rec.sources_examined += len(found) - n_img
         rec.evidence_indexed += added
-        rec.sources_extracted += min(d.extract_urls, len(found))
+        rec.images_indexed += n_img
+        rec.sources_extracted += min(d.extract_urls, max(0, len(found) - n_img))
         if obj.emergent:
             rec.new_boxes.append(obj.name)
 

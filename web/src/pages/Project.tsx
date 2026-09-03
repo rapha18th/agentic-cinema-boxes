@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
@@ -20,39 +20,42 @@ export function Project() {
   const [running, setRunning] = useState(false);
   const [q, setQ] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [selBox, setSelBox] = useState<string | null>(null);
   const [uploadBox, setUploadBox] = useState("");
 
-  const contradicts = verdicts.filter((v: any) => v.relation === "contradicts");
-  const contextual = verdicts.filter((v: any) => v.relation === "contextualises");
+  const boxName = useMemo(
+    () => Object.fromEntries(boxes.map((b: any) => [b.id, b.name])),
+    [boxes],
+  );
+  const selEvidence = useMemo(
+    () => (selBox ? evidence.filter((e: any) => e.objective_id === selBox) : []),
+    [selBox, evidence],
+  );
+
+  const push = (s: string) => setActivity((a) => [...a.slice(-120), s]);
 
   const start = async () => {
-    setRunning(true);
-    setActivity([]);
+    setRunning(true); setActivity([]);
     try {
       await runProject(pid, (ev) => {
         if (ev.type === "search") push(`search · ${ev.objective}`);
-        else if (ev.type === "extract") push(`extract · ${ev.objective}: ${ev.sources} sources`);
+        else if (ev.type === "extract") push(`  ${ev.objective}: ${ev.sources} sources${ev.images ? `, ${ev.images} images` : ""}`);
         else if (ev.type === "coverage") push(`→ ${ev.summary}`);
-        else if (ev.type === "emergent_gap") push(`EMERGENT GAP → opening ${ev.objective.name}`);
-        else if (ev.type === "contradiction") push(`! contradiction found`);
+        else if (ev.type === "emergent_gap") push(`EMERGENT GAP → ${ev.objective.name}`);
+        else if (ev.type === "contradiction") push(`! contradiction`);
         else if (ev.type === "stop") push(`STOP: ${ev.reason}`);
         else if (ev.type === "complete") push(`complete · ${ev.evidence} evidence · ${pct(ev.confidence)}`);
         else if (ev.type === "error") push(`error: ${ev.error}`);
       });
-    } finally {
-      setRunning(false);
-    }
+    } finally { setRunning(false); }
   };
-  const push = (s: string) => setActivity((a) => [...a, s]);
 
   const doAsk = async () => {
     if (!q.trim()) return;
     setAnswers(await ask(pid, q.trim()).catch(() => []));
   };
-
   const doUpload = async (f: File) => {
-    push(`uploading ${f.name} → ${uploadBox || "unfiled"}`);
+    push(`uploading ${f.name} → ${boxName[uploadBox] || "unfiled"}`);
     await uploadResource(pid, f, uploadBox, "");
     push(`indexed ${f.name}`);
   };
@@ -69,22 +72,22 @@ export function Project() {
       </header>
 
       <p className="premise">{project.premise}</p>
-
       <button onClick={start} disabled={running}>
         {running ? "Researching…" : runs.length ? "Research again" : "Start research"}
       </button>
 
       <div className="grid">
         <section className="card">
-          <h3>Research map</h3>
-          <ResearchMap boxes={boxes as any} evidence={evidence as any} />
+          <h3>Research map <span className="muted">{selBox ? "· click empty space to clear" : "· click a box"}</span></h3>
+          <ResearchMap boxes={boxes as any} evidence={evidence as any} selected={selBox} onSelect={setSelBox} />
           <div className="boxwrap">
             {[...boxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => (
-              <div className="box" key={b.id}>
+              <button className={`box ${selBox === b.id ? "on" : ""}`} key={b.id}
+                      onClick={() => setSelBox(selBox === b.id ? null : b.id)}>
                 <div className="box-name">{b.name}{b.emergent ? " ✦" : ""}</div>
                 <div className="bar"><span style={{ width: `${(b.score ?? 0) * 100}%` }} /></div>
                 <div className="muted">{b.evidence_count ?? 0} items · {b.distinct_domains ?? 0} domains</div>
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -93,12 +96,34 @@ export function Project() {
           <h3>Activity</h3>
           <pre className="activity">{activity.join("\n") || "idle"}</pre>
           <h3>Ledger</h3>
-          <Ledger runs={runs as any} />
+          <Ledger runs={runs as any} evidence={evidence as any} />
         </section>
       </div>
 
+      {selBox && (
+        <section className="card">
+          <h3>{boxName[selBox]} <span className="muted">· {selEvidence.length} items</span></h3>
+          <div className="evgrid">
+            {selEvidence.map((e: any) => (
+              <a className="evcard" key={e.id} href={e.url || e.image_url} target="_blank" rel="noopener">
+                {e.modality === "image" && e.image_url
+                  ? <img src={e.image_url} alt="" loading="lazy" />
+                  : <div className="evtext">{(e.text || "").slice(0, 220)}</div>}
+                <div className="muted">
+                  {[e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ")}
+                  {e.source === "director" ? " · your upload" : ""}
+                  {e.modality === "image" ? ` · ${e.license_note || "check rights"}` : ""}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="card">
-        <h3>Contradictions <span className="muted">({contradicts.length} conflict, {contextual.length} context)</span></h3>
+        <h3>Contradictions <span className="muted">
+          ({verdicts.filter((v: any) => v.relation === "contradicts").length} conflict,
+          {" "}{verdicts.filter((v: any) => v.relation === "contextualises").length} context)</span></h3>
         {verdicts.map((v: any) => (
           <div className={`verdict ${v.relation}`} key={v.id}>
             <b>{v.relation}</b> — {v.explanation}
@@ -116,22 +141,27 @@ export function Project() {
             <option value="">unfiled</option>
             {boxes.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <input ref={fileRef} type="file" onChange={(e) => e.target.files?.[0] && doUpload(e.target.files[0])} />
+          <input type="file" onChange={(e) => e.target.files?.[0] && doUpload(e.target.files[0])} />
         </div>
-        <p className="muted">Text, PDF, or image. It is embedded into the same space as the agent's findings.</p>
+        <p className="muted">Text, PDF, or image. Embedded into the same space as the agent's findings.</p>
       </section>
 
       <section className="card">
         <h3>Ask the boxes</h3>
         <div className="row">
           <input value={q} onChange={(e) => setQ(e.target.value)}
-                 placeholder="What would our characters hear inside a bank?" onKeyDown={(e) => e.key === "Enter" && doAsk()} />
+                 placeholder="What would our characters actually see and hear?"
+                 onKeyDown={(e) => e.key === "Enter" && doAsk()} />
           <button onClick={doAsk}>Ask</button>
         </div>
         {answers.map((a, i) => (
           <div className="answer" key={i}>
+            {a.modality === "image" && a.image_url && <img className="ev-thumb" src={a.image_url} alt="" />}
             <div>{a.text}</div>
-            <div className="muted">{a.citation} {a.source === "director" ? "· your upload" : ""} · {a.score}</div>
+            <div className="muted">
+              {a.url ? <a href={a.url} target="_blank" rel="noopener">{a.citation}</a> : a.citation}
+              {a.source === "director" ? " · your upload" : ""} · {a.score}
+            </div>
           </div>
         ))}
       </section>
@@ -141,8 +171,16 @@ export function Project() {
           <h3>Reference reel</h3>
           {reel.map((b: any, i: number) => (
             <div className="beat" key={i}>
-              <b>{b.t}</b> {b.title} — {b.note}
-              {b.citations?.slice(0, 3).map((c: string, j: number) => <div className="muted" key={j}>{c}</div>)}
+              <div><b>{b.t}</b> {b.title} — {b.note}</div>
+              <div className="beat-src">
+                {(b.sources || []).map((s: any, j: number) => (
+                  s.image_url
+                    ? <a key={j} href={s.url || s.image_url} target="_blank" rel="noopener" title={s.cite}>
+                        <img className="ev-thumb" src={s.image_url} alt="" loading="lazy" />
+                      </a>
+                    : <a key={j} className="src-link" href={s.url} target="_blank" rel="noopener">{s.cite}</a>
+                ))}
+              </div>
             </div>
           ))}
         </section>

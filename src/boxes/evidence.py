@@ -23,7 +23,12 @@ class Evidence:
     retrieved_at: float = field(default_factory=time.time)
     relevance_reason: str = ""  # why the agent kept it
     license_note: str = ""  # rights status where known
+    image_url: str = ""  # for modality == image: the picture itself
+    round: int = 0  # which research round produced this
     id: str = ""
+    # Precomputed embedding. Set for images (embedded as picture + caption);
+    # left None for text, which the loop batch-embeds. Never serialized.
+    vector: list[float] | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.source_domain and self.url:
@@ -32,11 +37,13 @@ class Evidence:
             except Exception:
                 self.source_domain = ""
         if not self.id:
-            h = hashlib.sha1(f"{self.url}|{self.text[:160]}".encode("utf-8")).hexdigest()
-            self.id = h[:16]
+            key = self.image_url or f"{self.url}|{self.text[:160]}"
+            self.id = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("vector", None)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Evidence":
