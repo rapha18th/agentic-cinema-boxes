@@ -184,6 +184,8 @@ def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
                 "citation": _cite(rows[i]),
                 "url": rows[i].get("url", ""),
                 "image_url": rows[i].get("image_url", ""),
+                "media_url": rows[i].get("media_url", ""),
+                "media_mime": rows[i].get("media_mime", ""),
                 "modality": rows[i].get("modality", "text"),
                 "source": rows[i].get("source", "parallel"),
             }

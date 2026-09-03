@@ -63,6 +63,8 @@ def build_reel(premise: str, evidence: list[Evidence], *, limit: int = 28) -> li
                         "cite": by_id[i].cite(),
                         "url": by_id[i].url,
                         "image_url": by_id[i].image_url,
+                        "media_url": by_id[i].media_url,
+                        "media_mime": by_id[i].media_mime,
                         "modality": by_id[i].modality,
                         "license_note": by_id[i].license_note,
                     }

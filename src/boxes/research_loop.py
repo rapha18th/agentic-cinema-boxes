@@ -134,11 +134,14 @@ def _do_round(
         confidence_before=before.confidence if before else 0.0,
     )
 
-    per_obj_images = max(1, d.images_per_round // max(1, len(targets))) if d.images_per_round else 0
+    # Distribute the round's media budget across objectives, at most 2 of a kind
+    # per objective, and never exceed the round total.
+    budget = {"img": d.images_per_round, "doc": d.docs_per_round, "av": d.av_per_round}
     for obj in targets:
         queries = ontology.objective_queries(obj, proj.premise, k=d.queries_per_objective)
         on_event({"type": "search", "objective": obj.name, "queries": queries})
         rec.searches.append({"objective": obj.name, "queries": queries})
+        take = {k: min(2, budget[k]) for k in budget}
         found = ps.research(
             obj.description or obj.name,
             queries,
@@ -146,15 +149,25 @@ def _do_round(
             extract_urls=d.extract_urls,
             full_content=d.full_content,
             round_no=run_no,
-            harvest_images_limit=per_obj_images,
+            harvest_images=take["img"],
+            harvest_docs=take["doc"],
+            harvest_av=take["av"],
         )
-        n_img = sum(1 for e in found if e.modality == "image")
-        on_event({"type": "extract", "objective": obj.name, "sources": len(found) - n_img, "images": n_img})
+        by_mod = Counter(e.modality for e in found)
+        n_text = by_mod.get("text", 0)
+        n_media = len(found) - n_text
+        on_event({"type": "extract", "objective": obj.name, "sources": n_text,
+                  "images": by_mod.get("image", 0), "docs": by_mod.get("pdf", 0),
+                  "av": by_mod.get("audio", 0) + by_mod.get("video", 0)})
         added = proj._add_evidence(found)
-        rec.sources_examined += len(found) - n_img
+        rec.sources_examined += n_text
         rec.evidence_indexed += added
-        rec.images_indexed += n_img
-        rec.sources_extracted += min(d.extract_urls, max(0, len(found) - n_img))
+        rec.images_indexed += by_mod.get("image", 0)
+        rec.media_indexed += n_media - by_mod.get("image", 0)
+        rec.sources_extracted += min(d.extract_urls, n_text)
+        budget["img"] -= by_mod.get("image", 0)
+        budget["doc"] -= by_mod.get("pdf", 0)
+        budget["av"] -= by_mod.get("audio", 0) + by_mod.get("video", 0)
         if obj.emergent:
             rec.new_boxes.append(obj.name)
 

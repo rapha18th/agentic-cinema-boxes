@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { MediaBit } from "./Media";
 
 interface Run {
   run: number;
   sources_examined?: number;
   evidence_indexed?: number;
   images_indexed?: number;
+  media_indexed?: number;
   sources_extracted?: number;
   coverage_before?: number;
   coverage_after?: number;
@@ -23,6 +25,8 @@ interface Ev {
   text?: string;
   url?: string;
   image_url?: string;
+  media_url?: string;
+  media_mime?: string;
   source_domain?: string;
   publish_date?: string;
 }
@@ -52,6 +56,7 @@ export function Ledger({ runs, evidence }: { runs: Run[]; evidence: Ev[] }) {
               <div className="run-body">
                 <div>{r.sources_examined ?? 0} sources · {r.evidence_indexed ?? 0} fragments
                   {!!r.images_indexed && <> · {r.images_indexed} images</>}
+                  {!!r.media_indexed && <> · {r.media_indexed} docs/av</>}
                   {!!r.sources_extracted && <> · {r.sources_extracted} via Extract</>}
                 </div>
                 <div>coverage {pct(r.coverage_before)} → {pct(r.coverage_after)}</div>
@@ -73,9 +78,7 @@ export function Ledger({ runs, evidence }: { runs: Run[]; evidence: Ev[] }) {
                     <summary>{mine.length} evidence items this round</summary>
                     {mine.map((e) => (
                       <div className="ev-row" key={e.id}>
-                        {e.modality === "image" && e.image_url && (
-                          <img className="ev-thumb" src={e.image_url} alt="" loading="lazy" />
-                        )}
+                        {e.modality && e.modality !== "text" && <MediaBit e={e} />}
                         <div>
                           {e.url
                             ? <a href={e.url} target="_blank" rel="noopener">{cite(e)}</a>

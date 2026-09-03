@@ -25,6 +25,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from google.genai import types
+
 from . import config
 from .embeddings import embed_parts, image_part
 from .evidence import Evidence
@@ -45,6 +47,34 @@ _IMG_TAG = re.compile(r"<img\b[^>]*>", re.I)
 _SRC = re.compile(r'\bsrc=["\']([^"\']+)["\']', re.I)
 _ALT = re.compile(r'\balt=["\']([^"\']*)["\']', re.I)
 _IMG_EXT = re.compile(r"\.(?:png|jpe?g|webp|gif)(?:$|[?&#])", re.I)
+
+# Extra modalities. Gemini Embedding 2 takes PDFs, audio, and video natively, so a
+# primary-source scan of a page can drop a document, a newsreel clip, or a
+# recording into the same 768-d space as the prose.
+_HREF = re.compile(r'<a\b[^>]+href=["\']([^"\']+)["\']', re.I)
+_MEDIA_META = re.compile(
+    r'<meta[^>]+(?:property|name)=["\'](?:og:audio|og:video|og:video:url|twitter:player:stream)["\'][^>]+content=["\']([^"\']+)["\']',
+    re.I,
+)
+_AV_TAG = re.compile(r'<(?:source|audio|video)\b[^>]+src=["\']([^"\']+)["\']', re.I)
+_EXT_KIND = {
+    "pdf": "pdf",
+    "mp3": "audio", "wav": "audio", "m4a": "audio", "aac": "audio", "flac": "audio", "oga": "audio",
+    "mp4": "video", "webm": "video", "m4v": "video",
+}
+_MEDIA_EXT = re.compile(r"\.(" + "|".join(_EXT_KIND) + r")(?:$|[?&#])", re.I)
+_MIME = {
+    "pdf": "application/pdf",
+    "mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4", "aac": "audio/aac",
+    "flac": "audio/flac", "oga": "audio/ogg",
+    "mp4": "video/mp4", "webm": "video/webm", "m4v": "video/mp4",
+}
+_SIZE = {  # (min, max) bytes per kind
+    "pdf": (10_000, 12_000_000),
+    "audio": (8_000, 9_000_000),
+    "video": (60_000, 14_000_000),
+}
+_GLYPH = {"pdf": "document", "audio": "recording", "video": "clip"}
 
 # Domains whose media is broadly reusable. Used only to annotate a rights note.
 _OPEN_MEDIA = ("wikimedia.org", "wikipedia.org", "loc.gov", "nasa.gov", "si.edu",
@@ -153,23 +183,23 @@ def extract(
 
 
 # ----------------------------------------------------------------------------- #
-# image harvesting: markdown -> bytes -> Gemini Embedding 2 (picture + caption)
+# asset harvesting: page -> bytes -> Gemini Embedding 2 (media + caption)
 # ----------------------------------------------------------------------------- #
 _JUNK = ("logo", "icon", "sprite", "avatar", "button", "1x1", "spacer", "pixel",
          "placeholder", "loading", "blank", "/emoji", "favicon", "badge")
+_UA = {"User-Agent": "the-boxes-research/0.1 (+https://helenia-11f98.web.app)"}
 
 
-def _page_images(page_url: str, timeout: float = 8.0) -> list[tuple[str, str]]:
-    """(image_url, alt) pairs from a page: og:image first, then real inline
-    images, resolved to absolute URLs, junk filtered."""
+def _get_html(page_url: str, timeout: float = 8.0) -> str:
     try:
-        r = httpx.get(page_url, timeout=timeout, follow_redirects=True,
-                      headers={"User-Agent": "the-boxes-research/0.1 (+https://helenia-11f98.web.app)"})
+        r = httpx.get(page_url, timeout=timeout, follow_redirects=True, headers=_UA)
         r.raise_for_status()
-        html = r.text
+        return r.text
     except (httpx.HTTPError, UnicodeDecodeError):
-        return []
+        return ""
 
+
+def _page_images(html: str, page_url: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for m in _META_IMG.findall(html):
         out.append((urljoin(page_url, m), ""))
@@ -182,78 +212,137 @@ def _page_images(page_url: str, timeout: float = 8.0) -> list[tuple[str, str]]:
             continue
         a = _ALT.search(tag)
         out.append((src, (a.group(1) if a else "").strip()))
-
     seen, uniq = set(), []
     for src, alt in out:
-        low = src.lower()
-        if src in seen or any(k in low for k in _JUNK):
+        if src in seen or any(k in src.lower() for k in _JUNK):
             continue
         seen.add(src)
         uniq.append((src, alt))
     return uniq
 
 
-def _fetch_image(url: str, timeout: float = 8.0) -> tuple[bytes, str] | None:
-    try:
-        r = httpx.get(url, timeout=timeout, follow_redirects=True,
-                      headers={"User-Agent": "the-boxes-research/0.1"})
-        r.raise_for_status()
-    except httpx.HTTPError:
-        return None
-    ct = r.headers.get("content-type", "").split(";")[0].strip().lower()
-    if not ct.startswith("image/") or ct == "image/svg+xml":
-        return None
-    if not (5_000 <= len(r.content) <= 6_000_000):
-        return None
-    return r.content, ct
-
-
-def harvest_images(
-    extracted: list[dict], *, objective_id: str, round_no: int, limit: int
-) -> list[Evidence]:
-    out: list[Evidence] = []
-    per_page = max(1, min(2, limit))
-    for src in extracted[:3]:  # only the strongest pages, keep the round fast
-        if len(out) >= limit:
-            break
-        page_url = src.get("url", "")
-        kept, tried = 0, 0
-        for img_url, alt in _page_images(page_url)[:4]:
-            if len(out) >= limit or kept >= per_page or tried >= 3:
-                break
-            tried += 1
-            got = _fetch_image(img_url)
-            if not got:
-                continue
-            kept += 1
-            data, ctype = got
-            caption = alt or src.get("title", "") or "reference image"
-            try:
-                vec = embed_parts([image_part(data, ctype), _text_part(caption)], dim=768)
-            except Exception:  # noqa: BLE001
-                continue
-            host = urlparse(img_url).netloc.lower()
-            ev = Evidence(
-                text=f"[image] {caption}",
-                url=src.get("url", ""),
-                title=caption[:120],
-                publish_date=src.get("publish_date"),
-                modality="image",
-                objective_id=objective_id,
-                query="image harvest",
-                image_url=img_url,
-                round=round_no,
-                license_note="likely reusable" if any(d in host for d in _OPEN_MEDIA) else "check rights",
-            )
-            ev.vector = vec
-            out.append(ev)
+def _page_media(html: str, page_url: str) -> list[tuple[str, str]]:
+    """(media_url, kind) for pdf / audio / video referenced by the page."""
+    cands: list[str] = [urljoin(page_url, u) for u in _MEDIA_META.findall(html)]
+    cands += [urljoin(page_url, u) for u in _AV_TAG.findall(html)]
+    for href in _HREF.findall(html):
+        u = urljoin(page_url, href)
+        if _MEDIA_EXT.search(u):
+            cands.append(u)
+    if _MEDIA_EXT.search(page_url):  # the source itself is a document or clip
+        cands.insert(0, page_url)
+    out, seen = [], set()
+    for u in cands:
+        if not u.lower().startswith("http") or u in seen:
+            continue
+        m = _MEDIA_EXT.search(u)
+        if not m:
+            continue
+        seen.add(u)
+        out.append((u, _EXT_KIND[m.group(1).lower()]))
     return out
 
 
-def _text_part(s: str):
-    from google.genai import types
+def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] | None:
+    """want: 'image' | 'pdf' | 'audio' | 'video'. Returns (bytes, mime) or None."""
+    try:
+        r = httpx.get(url, timeout=timeout, follow_redirects=True, headers=_UA)
+        r.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    data = r.content
+    ct = r.headers.get("content-type", "").split(";")[0].strip().lower()
+    if want == "image":
+        if not ct.startswith("image/") or ct == "image/svg+xml":
+            return None
+        return (data, ct) if 5_000 <= len(data) <= 6_000_000 else None
+    lo, hi = _SIZE[want]
+    if not (lo <= len(data) <= hi):
+        return None
+    if want == "pdf":
+        if not (data[:5] == b"%PDF-" or ct == "application/pdf"):
+            return None
+        return data, "application/pdf"
+    if want == "audio" and not ct.startswith("audio/"):
+        return None
+    if want == "video" and not ct.startswith("video/"):
+        return None
+    ext = (_MEDIA_EXT.search(url) or [None, ""])[1].lower()
+    return data, (ct if "/" in ct else _MIME.get(ext, f"{want}/octet-stream"))
 
-    return types.Part(text=s)
+
+def _rights(host: str) -> str:
+    return "likely reusable" if any(d in host for d in _OPEN_MEDIA) else "check rights"
+
+
+def harvest_assets(
+    pages: list[dict], *, objective_id: str, round_no: int,
+    images: int = 0, docs: int = 0, av: int = 0,
+) -> list[Evidence]:
+    """Pull a few pictures, documents, and recordings off the pages Parallel
+    surfaced and embed each one with Gemini Embedding 2 as media + caption."""
+    out: list[Evidence] = []
+    n_img = n_doc = n_av = 0
+
+    def add(kind: str, media_url: str, caption: str, page: dict, want: str) -> bool:
+        got = _fetch(media_url, want=want)
+        if not got:
+            return False
+        data, mime = got
+        try:
+            part = image_part(data, mime) if want == "image" else types.Part.from_bytes(
+                data=data, mime_type=mime
+            )
+            vec = embed_parts([part, types.Part(text=caption)], dim=768)
+        except Exception:  # noqa: BLE001
+            return False
+        ev = Evidence(
+            text=f"[{kind}] {caption}",
+            url=page.get("url", ""),
+            title=caption[:120],
+            publish_date=page.get("publish_date"),
+            modality=kind,
+            objective_id=objective_id,
+            query=f"{kind} harvest",
+            image_url=media_url if kind == "image" else "",
+            media_url=media_url,
+            media_mime=mime,
+            round=round_no,
+            license_note=_rights(urlparse(media_url).netloc.lower()),
+        )
+        ev.vector = vec
+        out.append(ev)
+        return True
+
+    for page in pages[:3]:
+        if n_img >= images and n_doc >= docs and n_av >= av:
+            break
+        html = _get_html(page.get("url", ""))
+        if not html:
+            continue
+
+        kept = 0
+        for src, alt in (_page_images(html, page["url"])[:4] if n_img < images else []):
+            if n_img >= images or kept >= 2:
+                break
+            if add("image", src, alt or page.get("title", "") or "reference image", page, "image"):
+                n_img += 1
+                kept += 1
+
+        for murl, kind in _page_media(html, page["url"]):
+            if kind == "pdf" and n_doc >= docs:
+                continue
+            if kind in ("audio", "video") and n_av >= av:
+                continue
+            cap = page.get("title", "") or _GLYPH[kind]
+            if add(kind, murl, cap, page, kind):
+                if kind == "pdf":
+                    n_doc += 1
+                else:
+                    n_av += 1
+            if n_doc >= docs and n_av >= av:
+                break
+    return out
 
 
 # ----------------------------------------------------------------------------- #
@@ -269,10 +358,12 @@ def research(
     full_content: bool = True,
     per_source_chars: int = 1_400,
     round_no: int = 0,
-    harvest_images_limit: int = 0,
+    harvest_images: int = 0,
+    harvest_docs: int = 0,
+    harvest_av: int = 0,
 ) -> list[Evidence]:
-    """One research pass: search for the objective, extract the top sources,
-    harvest a few images, and return evidence units with provenance attached."""
+    """One research pass: search the objective, extract the top sources, harvest a
+    few pictures, documents, and recordings, and return evidence with provenance."""
     seen: dict[str, SearchHit] = {}
     for q in queries:
         try:
@@ -288,8 +379,7 @@ def research(
 
     top_urls = [h.url for h in hits[:extract_urls]]
     extracted_list = extract(
-        top_urls, objective=objective, search_queries=queries,
-        full_content=full_content or harvest_images_limit > 0,
+        top_urls, objective=objective, search_queries=queries, full_content=full_content,
     )
     extracted = {e["url"]: e for e in extracted_list}
 
@@ -312,12 +402,12 @@ def research(
             )
         )
 
-    if harvest_images_limit:
+    if harvest_images or harvest_docs or harvest_av:
         pages = [{"url": h.url, "title": h.title, "publish_date": h.publish_date}
                  for h in hits[: extract_urls + 2]]
-        evidence += harvest_images(
+        evidence += harvest_assets(
             pages, objective_id=objective_id, round_no=round_no,
-            limit=harvest_images_limit,
+            images=harvest_images, docs=harvest_docs, av=harvest_av,
         )
     return evidence
 

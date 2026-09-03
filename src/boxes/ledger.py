@@ -14,6 +14,7 @@ class RoundRecord:
     sources_examined: int = 0
     evidence_indexed: int = 0
     images_indexed: int = 0
+    media_indexed: int = 0  # PDFs + audio + video embedded multimodally
     sources_extracted: int = 0  # sources enriched through Parallel Extract
     coverage_before: float = 0.0
     coverage_after: float = 0.0
@@ -36,6 +37,8 @@ class RoundRecord:
         ]
         if self.images_indexed:
             lines.append(f"  {self.images_indexed:>4} images indexed")
+        if self.media_indexed:
+            lines.append(f"  {self.media_indexed:>4} documents / recordings embedded")
         if self.sources_extracted:
             lines.append(f"  {self.sources_extracted:>4} sources enriched via Parallel Extract")
         lines.append(
