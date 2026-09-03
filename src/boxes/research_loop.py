@@ -48,11 +48,11 @@ class ResearchProject:
     def confidence(self) -> float:
         return self.reports[-1].confidence if self.reports else 0.0
 
-    def _add_evidence(self, items: list[Evidence]) -> int:
+    def _add_evidence(self, items: list[Evidence]) -> list[Evidence]:
         seen = {x.id for x in self.evidence}
         fresh = [e for e in items if e.id not in seen]
         if not fresh:
-            return 0
+            return []
         # images carry their own picture+caption vector; text is batch-embedded
         need = [e for e in fresh if e.vector is None]
         if need:
@@ -62,7 +62,7 @@ class ResearchProject:
         vecs = np.asarray([e.vector for e in fresh], dtype=np.float32)
         self.vectors = vecs if self.vectors is None else np.vstack([self.vectors, vecs])
         self.evidence.extend(fresh)
-        return len(fresh)
+        return fresh
 
     def signal_terms(self, top: int = 12) -> list[str]:
         """Frequent capitalised phrases across evidence, a rough read on what the
@@ -84,12 +84,26 @@ def run(premise: str, *, depth: str | Depth = "scout", on_event: EventFn = _noop
     d = depth if isinstance(depth, Depth) else get_depth(depth)
     proj = ResearchProject(premise=premise, depth=d)
 
+    def progress(phase: str, **kw) -> None:
+        rep = proj.reports[-1] if proj.reports else None
+        on_event({
+            "type": "progress", "phase": phase,
+            "max_rounds": d.max_rounds, "depth": d.name,
+            "objectives_total": len(proj.objectives),
+            "evidence": len(proj.evidence),
+            "confidence": rep.confidence if rep else 0.0,
+            "coverage": rep.overall_coverage if rep else 0.0,
+            **kw,
+        })
+
     # --- plan -------------------------------------------------------------- #
+    progress("planning", round=0)
     proj.objectives = ontology.research_plan(premise, n=d.objectives)
     on_event({"type": "plan", "objectives": [o.to_dict() for o in proj.objectives]})
+    progress("planned", round=0)
 
     # --- round 0: sweep every objective ---------------------------------- #
-    _do_round(proj, proj.objectives, run_no=0, on_event=on_event)
+    _do_round(proj, proj.objectives, run_no=0, on_event=on_event, progress=progress)
 
     # --- autonomous follow-up rounds ------------------------------------- #
     rounds_done = 0
@@ -97,6 +111,7 @@ def run(premise: str, *, depth: str | Depth = "scout", on_event: EventFn = _noop
         rep = proj.reports[-1]
         stop, why = coverage.should_stop(rep, d.confidence_target, rounds_done, d.max_rounds)
         if stop:
+            progress("done", round=rounds_done)
             on_event({"type": "stop", "reason": why, "confidence": rep.confidence})
             break
         rounds_done += 1
@@ -113,7 +128,8 @@ def run(premise: str, *, depth: str | Depth = "scout", on_event: EventFn = _noop
             targets.append(emergent)
             on_event({"type": "emergent_gap", "objective": emergent.to_dict()})
 
-        _do_round(proj, targets, run_no=rounds_done, on_event=on_event, emergent=emergent)
+        _do_round(proj, targets, run_no=rounds_done, on_event=on_event,
+                  emergent=emergent, progress=progress)
 
     return proj
 
@@ -125,6 +141,7 @@ def _do_round(
     run_no: int,
     on_event: EventFn,
     emergent: Objective | None = None,
+    progress: Callable[..., None] = lambda *a, **k: None,
 ) -> None:
     d = proj.depth
     before = proj.reports[-1] if proj.reports else None
@@ -137,7 +154,10 @@ def _do_round(
     # Distribute the round's media budget across objectives, at most 2 of a kind
     # per objective, and never exceed the round total.
     budget = {"img": d.images_per_round, "doc": d.docs_per_round, "av": d.av_per_round}
-    for obj in targets:
+    n_targets = len(targets)
+    for i, obj in enumerate(targets):
+        progress("researching", round=run_no, objective=obj.name,
+                 objective_index=i, objective_count=n_targets)
         queries = ontology.objective_queries(obj, proj.premise, k=d.queries_per_objective)
         on_event({"type": "search", "objective": obj.name, "queries": queries})
         rec.searches.append({"objective": obj.name, "queries": queries})
@@ -159,7 +179,11 @@ def _do_round(
         on_event({"type": "extract", "objective": obj.name, "sources": n_text,
                   "images": by_mod.get("image", 0), "docs": by_mod.get("pdf", 0),
                   "av": by_mod.get("audio", 0) + by_mod.get("video", 0)})
-        added = proj._add_evidence(found)
+        fresh = proj._add_evidence(found)
+        if fresh:
+            on_event({"type": "evidence", "objective": obj.name,
+                      "items": [e.to_dict() for e in fresh]})
+        added = len(fresh)
         rec.sources_examined += n_text
         rec.evidence_indexed += added
         rec.images_indexed += by_mod.get("image", 0)
@@ -172,6 +196,7 @@ def _do_round(
             rec.new_boxes.append(obj.name)
 
     # --- contradictions: candidates by embedding, verdicts by Gemini --- #
+    progress("verifying", round=run_no)
     max_checks = 8 if proj.depth.name == "scout" else 18
     new_verdicts = contradiction.find_contradictions(proj.evidence, proj.vectors, max_checks=max_checks)
     for v in new_verdicts:
@@ -186,6 +211,7 @@ def _do_round(
     open_conflicts = sum(1 for v in proj.contradictions if v.relation == "contradicts")
 
     # --- coverage + confidence ---------------------------------------- #
+    progress("scoring", round=run_no)
     rep = coverage.build_report(
         proj.objectives, proj.evidence, proj.vectors,
         unresolved_contradictions=open_conflicts,

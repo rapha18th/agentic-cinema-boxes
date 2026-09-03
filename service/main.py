@@ -103,6 +103,11 @@ def _persist_event(uid: str, pid: str, ev: dict) -> None:
         store.add_verdict(uid, pid, ev["verdict"])
     elif t == "round_done":
         store.add_run(uid, pid, ev["record"])
+    elif t == "evidence":
+        # write as it arrives so the map fills live; vectors added at the end
+        store.add_evidence_batch(uid, pid, [(it, None) for it in ev["items"]])
+    elif t == "progress":
+        store.set_project_status(uid, pid, progress={k: v for k, v in ev.items() if k != "type"})
     elif t == "stop":
         store.set_project_status(uid, pid, status="done", stop_reason=ev["reason"])
 

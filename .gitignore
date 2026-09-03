@@ -11,3 +11,5 @@ data/cache/
 .adk/
 *.out
 *.err
+
+.firebase/

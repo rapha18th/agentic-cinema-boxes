@@ -24,8 +24,9 @@ class Evidence:
     relevance_reason: str = ""  # why the agent kept it
     license_note: str = ""  # rights status where known
     image_url: str = ""  # for modality == image: the picture itself
-    media_url: str = ""  # for image/pdf/audio/video: the asset URL
+    media_url: str = ""  # for image/pdf/audio/video: the full asset URL
     media_mime: str = ""  # the asset's MIME type
+    media_trimmed: bool = False  # audio/video was clipped for embedding; full at media_url
     round: int = 0  # which research round produced this
     id: str = ""
     # Precomputed embedding. Set for images (embedded as picture + caption);
