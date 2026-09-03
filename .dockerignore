@@ -1,0 +1,7 @@
+web/
+scripts/
+data/
+**/__pycache__/
+*.md
+.git/
+.venv/
