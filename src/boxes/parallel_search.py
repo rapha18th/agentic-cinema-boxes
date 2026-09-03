@@ -20,6 +20,7 @@ Contracts (Parallel API v1):
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
@@ -28,6 +29,7 @@ import httpx
 from google.genai import types
 
 from . import config
+from . import media as media_mod
 from .embeddings import embed_parts, image_part
 from .evidence import Evidence
 
@@ -69,10 +71,10 @@ _MIME = {
     "flac": "audio/flac", "oga": "audio/ogg",
     "mp4": "video/mp4", "webm": "video/webm", "m4v": "video/mp4",
 }
-_SIZE = {  # (min, max) bytes per kind
+_SIZE = {  # (min, max) bytes per kind; audio/video are trimmed after download
     "pdf": (10_000, 12_000_000),
-    "audio": (8_000, 9_000_000),
-    "video": (60_000, 14_000_000),
+    "audio": (8_000, 60_000_000),
+    "video": (60_000, 90_000_000),
 }
 _GLYPH = {"pdf": "document", "audio": "recording", "video": "clip"}
 
@@ -275,73 +277,90 @@ def _rights(host: str) -> str:
     return "likely reusable" if any(d in host for d in _OPEN_MEDIA) else "check rights"
 
 
+def _page_assets(page: dict, *, images: int, docs: int, av: int) -> list[dict]:
+    """Fetch a bounded set of assets off one page. Pure I/O, runs in a thread.
+    Returns raw material dicts; embedding happens later, on the main thread."""
+    url = page.get("url", "")
+    html = _get_html(url)
+    if not html:
+        return []
+    plans: list[tuple[str, str, str]] = []  # (kind, want, media_url)
+    for src, _alt in _page_images(html, url)[:3][: max(0, images)]:
+        plans.append(("image", "image", src))
+    seen_kind = {"pdf": 0, "audio": 0, "video": 0}
+    for murl, kind in _page_media(html, url):
+        cap = docs if kind == "pdf" else av
+        if seen_kind[kind] >= min(2, cap):
+            continue
+        seen_kind[kind] += 1
+        plans.append((kind, kind, murl))
+
+    mats: list[dict] = []
+    for kind, want, murl in plans:
+        got = _fetch(murl, want=want)
+        if not got:
+            continue
+        data, mime = got
+        trimmed = False
+        if kind in ("audio", "video"):
+            data, mime, trimmed = media_mod.trim_av(data, mime)
+        mats.append({
+            "kind": kind, "data": data, "mime": mime, "media_url": murl,
+            "trimmed": trimmed, "page": page,
+        })
+    return mats
+
+
 def harvest_assets(
     pages: list[dict], *, objective_id: str, round_no: int,
     images: int = 0, docs: int = 0, av: int = 0,
 ) -> list[Evidence]:
     """Pull a few pictures, documents, and recordings off the pages Parallel
-    surfaced and embed each one with Gemini Embedding 2 as media + caption."""
-    out: list[Evidence] = []
-    n_img = n_doc = n_av = 0
+    surfaced and embed each with Gemini Embedding 2 as media + caption. Fetching
+    runs in parallel; embedding stays sequential (one genai client)."""
+    todo = [p for p in pages[:3] if p.get("url")]
+    if not todo or not (images or docs or av):
+        return []
 
-    def add(kind: str, media_url: str, caption: str, page: dict, want: str) -> bool:
-        got = _fetch(media_url, want=want)
-        if not got:
-            return False
-        data, mime = got
+    with ThreadPoolExecutor(max_workers=min(3, len(todo))) as ex:
+        batches = list(ex.map(
+            lambda p: _page_assets(p, images=images, docs=docs, av=av), todo
+        ))
+    mats = [m for b in batches for m in b]
+
+    budget = {"image": images, "pdf": docs, "audio": av, "video": av}
+    out: list[Evidence] = []
+    for m in mats:
+        k = m["kind"]
+        if budget.get(k, 0) <= 0:
+            continue
+        page, media_url, mime = m["page"], m["media_url"], m["mime"]
+        caption = (page.get("title") or _GLYPH.get(k, "reference"))[:200]
         try:
-            part = image_part(data, mime) if want == "image" else types.Part.from_bytes(
-                data=data, mime_type=mime
+            part = image_part(m["data"], mime) if k == "image" else types.Part.from_bytes(
+                data=m["data"], mime_type=mime
             )
             vec = embed_parts([part, types.Part(text=caption)], dim=768)
         except Exception:  # noqa: BLE001
-            return False
+            continue
         ev = Evidence(
-            text=f"[{kind}] {caption}",
+            text=f"[{k}] {caption}",
             url=page.get("url", ""),
             title=caption[:120],
             publish_date=page.get("publish_date"),
-            modality=kind,
+            modality=k,
             objective_id=objective_id,
-            query=f"{kind} harvest",
-            image_url=media_url if kind == "image" else "",
+            query=f"{k} harvest",
+            image_url=media_url if k == "image" else "",
             media_url=media_url,
             media_mime=mime,
+            media_trimmed=m["trimmed"],
             round=round_no,
             license_note=_rights(urlparse(media_url).netloc.lower()),
         )
         ev.vector = vec
         out.append(ev)
-        return True
-
-    for page in pages[:3]:
-        if n_img >= images and n_doc >= docs and n_av >= av:
-            break
-        html = _get_html(page.get("url", ""))
-        if not html:
-            continue
-
-        kept = 0
-        for src, alt in (_page_images(html, page["url"])[:4] if n_img < images else []):
-            if n_img >= images or kept >= 2:
-                break
-            if add("image", src, alt or page.get("title", "") or "reference image", page, "image"):
-                n_img += 1
-                kept += 1
-
-        for murl, kind in _page_media(html, page["url"]):
-            if kind == "pdf" and n_doc >= docs:
-                continue
-            if kind in ("audio", "video") and n_av >= av:
-                continue
-            cap = page.get("title", "") or _GLYPH[kind]
-            if add(kind, murl, cap, page, kind):
-                if kind == "pdf":
-                    n_doc += 1
-                else:
-                    n_av += 1
-            if n_doc >= docs and n_av >= av:
-                break
+        budget[k] -= 1
     return out
 
 

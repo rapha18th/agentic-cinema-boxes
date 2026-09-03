@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
+import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { useBoxes, useEvidence, useProject, useReel, useRuns, useVerdicts } from "../data";
 import { ask, runProject, uploadResource } from "../api";
 
@@ -19,6 +20,8 @@ export function Project() {
 
   const [activity, setActivity] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<Progress>({});
+  const [liveEv, setLiveEv] = useState<any[]>([]);
   const [q, setQ] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
   const [selBox, setSelBox] = useState<string | null>(null);
@@ -28,29 +31,39 @@ export function Project() {
     () => Object.fromEntries(boxes.map((b: any) => [b.id, b.name])),
     [boxes],
   );
+  // Firestore is the source of truth; streamed evidence fills the gap until it catches up.
+  const allEvidence = useMemo(() => {
+    const seen = new Set(evidence.map((e: any) => e.id));
+    return [...evidence, ...liveEv.filter((e) => !seen.has(e.id))];
+  }, [evidence, liveEv]);
   const selEvidence = useMemo(
-    () => (selBox ? evidence.filter((e: any) => e.objective_id === selBox) : []),
-    [selBox, evidence],
+    () => (selBox ? allEvidence.filter((e: any) => e.objective_id === selBox) : []),
+    [selBox, allEvidence],
   );
 
   const push = (s: string) => setActivity((a) => [...a.slice(-120), s]);
 
   const start = async () => {
-    setRunning(true); setActivity([]);
+    setRunning(true); setActivity([]); setLiveEv([]); setProgress({ phase: "planning" });
     try {
       await runProject(pid, (ev) => {
-        if (ev.type === "search") push(`search · ${ev.objective}`);
+        if (ev.type === "progress") setProgress((p) => ({ ...p, ...ev }));
+        else if (ev.type === "evidence") {
+          setLiveEv((cur) => [...cur, ...ev.items]);
+          push(`+${ev.items.length} indexed · ${ev.objective}`);
+        }
+        else if (ev.type === "search") push(`SEARCH  ${ev.objective}`);
         else if (ev.type === "extract") {
           const extra = [ev.images && `${ev.images} img`, ev.docs && `${ev.docs} pdf`, ev.av && `${ev.av} a/v`]
             .filter(Boolean).join(", ");
-          push(`  ${ev.objective}: ${ev.sources} sources${extra ? ` + ${extra}` : ""}`);
+          push(`EXTRACT ${ev.objective}: ${ev.sources} sources${extra ? ` + ${extra}` : ""}`);
         }
-        else if (ev.type === "coverage") push(`→ ${ev.summary}`);
-        else if (ev.type === "emergent_gap") push(`EMERGENT GAP → ${ev.objective.name}`);
-        else if (ev.type === "contradiction") push(`! contradiction`);
-        else if (ev.type === "stop") push(`STOP: ${ev.reason}`);
-        else if (ev.type === "complete") push(`complete · ${ev.evidence} evidence · ${pct(ev.confidence)}`);
-        else if (ev.type === "error") push(`error: ${ev.error}`);
+        else if (ev.type === "coverage") push(`SCORE   ${ev.summary}`);
+        else if (ev.type === "emergent_gap") push(`GAP     opening ${ev.objective.name}`);
+        else if (ev.type === "contradiction") push(`CONFLICT ${ev.verdict.a_cite} vs ${ev.verdict.b_cite}`);
+        else if (ev.type === "stop") push(`STOP    ${ev.reason}`);
+        else if (ev.type === "complete") { push(`DONE    ${ev.evidence} fragments · ${pct(ev.confidence)}`); setProgress((p) => ({ ...p, phase: "done" })); }
+        else if (ev.type === "error") push(`ERROR   ${ev.error}`);
       });
     } finally { setRunning(false); }
   };
@@ -81,19 +94,26 @@ export function Project() {
         {running ? "Researching…" : runs.length ? "Research again" : "Start research"}
       </button>
 
+      {(running || progress.phase === "done") && (
+        <ResearchConsole progress={progress} log={activity} done={!running && progress.phase === "done"} />
+      )}
+
       <div className="grid">
         <section className="card">
           <h3>Research map <span className="muted">{selBox ? "· click empty space to clear" : "· click a box"}</span></h3>
-          <ResearchMap boxes={boxes as any} evidence={evidence as any} selected={selBox} onSelect={setSelBox} />
+          <ResearchMap boxes={boxes as any} evidence={allEvidence as any} selected={selBox} onSelect={setSelBox} />
           <div className="boxwrap">
-            {[...boxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => (
-              <button className={`box ${selBox === b.id ? "on" : ""}`} key={b.id}
-                      onClick={() => setSelBox(selBox === b.id ? null : b.id)}>
-                <div className="box-name">{b.name}{b.emergent ? " ✦" : ""}</div>
-                <div className="bar"><span style={{ width: `${(b.score ?? 0) * 100}%` }} /></div>
-                <div className="muted">{b.evidence_count ?? 0} items · {b.distinct_domains ?? 0} domains</div>
-              </button>
-            ))}
+            {[...boxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => {
+              const liveCount = allEvidence.filter((e: any) => e.objective_id === b.id).length;
+              return (
+                <button className={`box ${selBox === b.id ? "on" : ""}`} key={b.id}
+                        onClick={() => setSelBox(selBox === b.id ? null : b.id)}>
+                  <div className="box-name">{b.name}{b.emergent ? " ✦" : ""}</div>
+                  <div className="bar"><span style={{ width: `${(b.score ?? 0) * 100}%` }} /></div>
+                  <div className="muted">{Math.max(b.evidence_count ?? 0, liveCount)} items · {b.distinct_domains ?? 0} domains</div>
+                </button>
+              );
+            })}
           </div>
         </section>
 

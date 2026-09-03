@@ -70,3 +70,35 @@ a { color:#9db4ff; }
 .media-chip { display:inline-block; font-size:12px; border:1px solid var(--line); padding:3px 8px; border-radius:6px; text-decoration:none; }
 .beat-media { display:inline-flex; align-items:center; gap:6px; max-width:280px; }
 .beat-media .ev-audio { width:180px; }
+
+/* ── research console: 2001 mission-control ─────────────────────────── */
+.rc { position:relative; overflow:hidden; margin:16px 0; padding:22px 20px 18px;
+  background:#050505; border:1px solid #241a06; border-radius:12px;
+  color:#ffb02e; font-family:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  letter-spacing:.06em; box-shadow:inset 0 0 60px #ffb02e14; }
+.rc-done { color:#7dd87d; border-color:#123212; }
+.rc-scan { position:absolute; left:0; right:0; height:2px; background:#ffb02e33;
+  animation:rc-scan 3.4s linear infinite; pointer-events:none; }
+@keyframes rc-scan { 0%{ top:-2px } 100%{ top:100% } }
+.rc-head { display:flex; justify-content:space-between; font-size:11px; opacity:.7; }
+.rc-phase { text-align:center; font-size:22px; font-weight:600; letter-spacing:.22em;
+  margin:16px 0 6px; text-transform:uppercase; }
+.rc-cursor { animation:rc-blink 1s step-end infinite; margin-left:4px; }
+@keyframes rc-blink { 50%{ opacity:0 } }
+.rc-obj { text-align:center; font-size:12px; opacity:.85; margin-bottom:16px; }
+.rc-obj b { color:#ffd98a; }
+.rc-bars { max-width:560px; margin:0 auto; display:flex; flex-direction:column; gap:6px; }
+.rc-bar { display:flex; align-items:center; gap:10px; font-size:12px; }
+.rc-bar-label { opacity:.6; white-space:pre; }
+.rc-bar-track { letter-spacing:0; white-space:pre; flex:1; overflow:hidden; }
+.rc-bar-track.tone-red { color:#ff5a4d; }
+.rc-bar-track.tone-dim { color:#8a7a4a; }
+.rc-bar-off { opacity:.25; }
+.rc-bar-pct { width:38px; text-align:right; opacity:.8; }
+.rc-count { text-align:center; font-size:12px; letter-spacing:.24em; margin:14px 0 10px; opacity:.75; }
+.rc-log { max-width:640px; margin:0 auto; font-size:11px; line-height:1.7; opacity:.7;
+  max-height:170px; overflow:auto; border-top:1px solid #241a06; padding-top:8px; }
+.rc-log > div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.media-wrap { display:inline-flex; flex-direction:column; gap:2px; }
+.more-src { font-size:11px; color:var(--muted); }

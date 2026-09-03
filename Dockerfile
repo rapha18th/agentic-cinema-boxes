@@ -7,6 +7,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# ffmpeg trims harvested audio/video to a short clip before embedding
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY service/requirements.txt ./service/requirements.txt
 RUN pip install --no-cache-dir -r service/requirements.txt
 
