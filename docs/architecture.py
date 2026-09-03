@@ -71,7 +71,7 @@ zone(3.7, 0.5, 17.0, 8.4, "Google Cloud", Z_GREY, dots=True)
 
 # left column: Hosting + Cloud Run
 tile(5.05, 7.35, "Firebase Hosting", "static app · /api", color=YELLOW, r=0.42)
-tile(5.05, 4.2, "Cloud Run", "boxes-api · FastAPI\nSSE · ffmpeg", color=BLUE, r=0.5)
+tile(5.05, 4.2, "Cloud Run", "boxes-api", color=BLUE, r=0.5)
 
 # top strip: Parallel (partner) + Vertex AI
 cluster(6.8, 6.5, 3.8, 1.9, "Parallel  ·  partner", ec=PURPLE, tc="#5B3FCF")
@@ -81,8 +81,10 @@ cluster(11.0, 6.5, 4.6, 1.9, "Vertex AI  ·  global")
 tile(12.2, 7.45, "Gemini 3.8 Flash", color=BLUE, r=0.36)
 tile(14.35, 7.45, "Gemini Embedding 2", color=BLUE, r=0.36)
 
-# middle strip: the loop
-cluster(6.4, 2.6, 9.8, 2.5, "Autonomous research loop   ·   ADK on Cloud Run")
+# middle strip: the loop  (title right-aligned, clear of the upward arrows)
+cluster(6.4, 2.6, 9.8, 2.5, "")
+ax.text(16.05, 4.82, "Autonomous research loop  ·  ADK on Cloud Run", fontsize=10, color=INK,
+        weight="bold", ha="right", va="center", zorder=4)
 seq = [("1 PLAN", GREEN), ("2 ACQUIRE", RED), ("3 EMBED", BLUE),
        ("4 MEASURE", YELLOW), ("5 VERIFY", RED), ("6 GAP", GREEN)]
 lx0, dx, ly = 7.4, 1.45, 3.85
@@ -100,27 +102,25 @@ tile(18.45, 6.7, "Cloud Firestore", "boxes · evidence\nruns · verdicts · reel
 tile(18.45, 3.5, "Cloud Storage", "source files · uploads", color=YELLOW, r=0.44)
 
 # ── flow ─────────────────────────────────────────────────────────────
-wire([(4.63, 7.35), (2.5, 6.7)], text="serves", tp=(3.5, 7.3))
-wire([(2.55, 6.15), (3.8, 6.15), (3.8, 4.55), (4.58, 4.42)], text="REST + ID token", tp=(3.8, 5.45))
-wire([(4.58, 4.02), (4.05, 4.02), (4.05, 5.75), (2.55, 5.75)],
-     color=BLUE, tcol=BLUE, text="SSE stream", tp=(3.25, 5.02))
-wire([(5.55, 4.2), (6.4, 4.2), (6.4, ly), (cxs[0] - 0.36, ly)], lw=2.0)
+wire([(4.63, 7.35), (2.55, 6.8)], text="serves", tp=(3.6, 7.4))
+wire([(2.6, 6.35), (3.65, 6.35), (3.65, 4.5), (4.58, 4.4)], text="REST + ID token", tp=(4.35, 5.6))
+wire([(4.58, 4.0), (4.0, 4.0), (4.0, 5.8), (2.6, 5.8)],
+     color=BLUE, tcol=BLUE, text="SSE stream", tp=(4.4, 4.45))
+wire([(5.55, 4.2), (6.35, 4.2), (6.35, ly), (cxs[0] - 0.36, ly)], lw=2.0)
 
-# loop <-> Parallel (up)
-wire([(cxs[1], ly + 0.36), (cxs[1], 5.55), (7.9, 5.55), (7.9, 7.09)],
-     color=PURPLE, tcol="#5B3FCF", text="objective + queries", tp=(cxs[1], 5.85))
-wire([(9.6, 7.09), (9.6, 5.9), (cxs[1] + 0.5, 5.9), (cxs[1] + 0.5, ly + 0.36)], color=PURPLE)
+# loop <-> Parallel (up), both directions
+wire([(cxs[1] - 0.12, ly + 0.36), (cxs[1] - 0.12, 5.5), (7.9, 5.5), (7.9, 7.09)],
+     color=PURPLE, tcol="#5B3FCF", text="objective + queries", tp=(cxs[1] - 0.4, 5.15))
+wire([(9.6, 7.09), (9.6, 5.85), (cxs[1] + 0.35, 5.85), (cxs[1] + 0.35, ly + 0.36)], color=PURPLE)
 
-# loop -> Vertex (up)
-wire([(cxs[0], ly + 0.36), (cxs[0], 5.75), (12.2, 5.75), (12.2, 7.09)], text="Gemini 3.8 Flash",
-     tp=(9.9, 6.02))
-wire([(cxs[2], ly + 0.36), (cxs[2], 5.35), (14.35, 5.35), (14.35, 7.09)], color=BLUE,
-     text="media + caption → vector", tp=(12.2, 5.62))
+# loop -> Vertex (one consolidated arrow, routed clear of the title)
+wire([(cxs[2], ly + 0.36), (cxs[2], 5.35), (13.2, 5.35), (13.2, 7.09)], color=BLUE,
+     text="Gemini 3.8 Flash  ·  Embedding 2", tp=(11.6, 5.62))
 
-# Cloud Run -> Data (bottom rail, inside Google Cloud)
-wire([(5.05, 3.7), (5.05, 1.15), (18.45, 1.15), (18.45, 2.86)], color=GREEN, tcol="#1E7B34",
-     text="persist live: evidence · progress · files", tp=(10.6, 0.93))
-wire([(18.45, 3.74), (18.45, 6.16)], color=GREEN, lw=2.0)
+# Cloud Run -> Data (bottom rail; enters the Data tiles on the left, clear of labels)
+wire([(5.05, 3.7), (5.05, 1.15), (17.15, 1.15), (17.15, 3.1), (18.05, 3.1)],
+     color=GREEN, tcol="#1E7B34", text="persist live: evidence · progress · files", tp=(10.6, 0.93))
+wire([(17.7, 3.5), (17.15, 3.5), (17.15, 6.5), (18.05, 6.5)], color=GREEN, lw=2.0)
 
 ax.text(0.3, 0.14, "Vertex AI serves Gemini on the  global  location.        Parallel Search + Extract is imported and "
         "invoked in runtime code on every research round.", fontsize=8, color=SUB)
