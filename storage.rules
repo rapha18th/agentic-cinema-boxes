@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Source files and director uploads, one subtree per user.
+    match /users/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false; // uploads go through the backend
+    }
+  }
+}

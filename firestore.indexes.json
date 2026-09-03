@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "evidence",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "objective_id", "order": "ASCENDING" },
+        { "fieldPath": "retrieved_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
