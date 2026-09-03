@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { MODALITY_GLYPH } from "./Media";
 
 interface Box {
   id: string;
@@ -13,6 +14,7 @@ interface Ev {
   source?: string;
   modality?: string;
   image_url?: string;
+  media_url?: string;
   url?: string;
   title?: string;
 }
@@ -52,12 +54,16 @@ export function ResearchMap({
       const seed = (i * 2654435761) % 997;
       const rad = 14 + (seed % 42);
       const ang = (seed * 0.618) % (Math.PI * 2);
+      const thumb = e.image_url || (e.modality === "image" ? e.media_url : "");
       return {
         e,
         x: c.x + rad * Math.cos(ang),
         y: c.y + rad * Math.sin(ang),
         color: e.source === "director" ? "#ffffff" : c.color,
-        isImg: e.modality === "image" && !!e.image_url,
+        isImg: e.modality === "image" && !!thumb,
+        thumb,
+        glyph: e.modality && e.modality !== "text" && e.modality !== "image"
+          ? MODALITY_GLYPH[e.modality] : "",
         director: e.source === "director",
       };
     });
@@ -112,13 +118,22 @@ export function ResearchMap({
               if (d.e.url) window.open(d.e.url, "_blank", "noopener");
             },
           };
-          return d.isImg ? (
-            <g key={i} {...common}>
-              <image href={d.e.image_url} x={d.x - 9} y={d.y - 9} width={18} height={18}
-                     clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice" />
-              <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} />
-            </g>
-          ) : (
+          if (d.isImg) {
+            return (
+              <g key={i} {...common}>
+                <image href={d.thumb} x={d.x - 9} y={d.y - 9} width={18} height={18}
+                       clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice" />
+                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} />
+              </g>
+            );
+          }
+          if (d.glyph) {
+            return (
+              <text key={i} x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11}
+                    fill={d.color} {...common}>{d.glyph}</text>
+            );
+          }
+          return (
             <circle key={i} cx={d.x} cy={d.y} r={d.director ? 3.8 : 2.7}
                     fill={d.color} stroke={d.director ? "#ffd166" : "none"} strokeWidth={d.director ? 1 : 0}
                     {...common} />

@@ -61,3 +61,12 @@ button.box.on { border-color:var(--accent); }
 .src-link { font-size:12px; color:#9db4ff; text-decoration:none; border:1px solid var(--line); padding:2px 6px; border-radius:6px; }
 .answer img.ev-thumb { float:left; margin:0 8px 4px 0; }
 a { color:#9db4ff; }
+
+/* extra modalities */
+.ev-full { width:100%; max-height:220px; object-fit:cover; border-radius:6px; }
+.ev-audio { width:100%; height:34px; }
+.ev-video { width:100%; max-height:150px; border-radius:6px; background:#000; }
+.ev-video-full { width:100%; max-height:260px; border-radius:6px; background:#000; }
+.media-chip { display:inline-block; font-size:12px; border:1px solid var(--line); padding:3px 8px; border-radius:6px; text-decoration:none; }
+.beat-media { display:inline-flex; align-items:center; gap:6px; max-width:280px; }
+.beat-media .ev-audio { width:180px; }

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
+import { MediaBit } from "../components/Media";
 import { useBoxes, useEvidence, useProject, useReel, useRuns, useVerdicts } from "../data";
 import { ask, runProject, uploadResource } from "../api";
 
@@ -39,7 +40,11 @@ export function Project() {
     try {
       await runProject(pid, (ev) => {
         if (ev.type === "search") push(`search · ${ev.objective}`);
-        else if (ev.type === "extract") push(`  ${ev.objective}: ${ev.sources} sources${ev.images ? `, ${ev.images} images` : ""}`);
+        else if (ev.type === "extract") {
+          const extra = [ev.images && `${ev.images} img`, ev.docs && `${ev.docs} pdf`, ev.av && `${ev.av} a/v`]
+            .filter(Boolean).join(", ");
+          push(`  ${ev.objective}: ${ev.sources} sources${extra ? ` + ${extra}` : ""}`);
+        }
         else if (ev.type === "coverage") push(`→ ${ev.summary}`);
         else if (ev.type === "emergent_gap") push(`EMERGENT GAP → ${ev.objective.name}`);
         else if (ev.type === "contradiction") push(`! contradiction`);
@@ -105,16 +110,18 @@ export function Project() {
           <h3>{boxName[selBox]} <span className="muted">· {selEvidence.length} items</span></h3>
           <div className="evgrid">
             {selEvidence.map((e: any) => (
-              <a className="evcard" key={e.id} href={e.url || e.image_url} target="_blank" rel="noopener">
-                {e.modality === "image" && e.image_url
-                  ? <img src={e.image_url} alt="" loading="lazy" />
+              <div className="evcard" key={e.id}>
+                {e.modality && e.modality !== "text"
+                  ? <MediaBit e={e} size="full" />
                   : <div className="evtext">{(e.text || "").slice(0, 220)}</div>}
                 <div className="muted">
-                  {[e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ")}
+                  {e.url
+                    ? <a href={e.url} target="_blank" rel="noopener">{[e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ")}</a>
+                    : [e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ")}
                   {e.source === "director" ? " · your upload" : ""}
-                  {e.modality === "image" ? ` · ${e.license_note || "check rights"}` : ""}
+                  {e.modality && e.modality !== "text" ? ` · ${e.license_note || "check rights"}` : ""}
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         </section>
@@ -156,7 +163,7 @@ export function Project() {
         </div>
         {answers.map((a, i) => (
           <div className="answer" key={i}>
-            {a.modality === "image" && a.image_url && <img className="ev-thumb" src={a.image_url} alt="" />}
+            {a.modality && a.modality !== "text" && <MediaBit e={a} />}
             <div>{a.text}</div>
             <div className="muted">
               {a.url ? <a href={a.url} target="_blank" rel="noopener">{a.citation}</a> : a.citation}
@@ -173,13 +180,19 @@ export function Project() {
             <div className="beat" key={i}>
               <div><b>{b.t}</b> {b.title} — {b.note}</div>
               <div className="beat-src">
-                {(b.sources || []).map((s: any, j: number) => (
-                  s.image_url
-                    ? <a key={j} href={s.url || s.image_url} target="_blank" rel="noopener" title={s.cite}>
-                        <img className="ev-thumb" src={s.image_url} alt="" loading="lazy" />
+                {(b.sources || []).map((s: any, j: number) => {
+                  if (s.modality === "image" && (s.image_url || s.media_url)) {
+                    return (
+                      <a key={j} href={s.url || s.media_url || s.image_url} target="_blank" rel="noopener" title={s.cite}>
+                        <img className="ev-thumb" src={s.media_url || s.image_url} alt="" loading="lazy" />
                       </a>
-                    : <a key={j} className="src-link" href={s.url} target="_blank" rel="noopener">{s.cite}</a>
-                ))}
+                    );
+                  }
+                  if ((s.modality === "audio" || s.modality === "video" || s.modality === "pdf") && s.media_url) {
+                    return <span key={j} className="beat-media"><MediaBit e={s} /> <span className="muted">{s.cite}</span></span>;
+                  }
+                  return <a key={j} className="src-link" href={s.url} target="_blank" rel="noopener">{s.cite}</a>;
+                })}
               </div>
             </div>
           ))}
