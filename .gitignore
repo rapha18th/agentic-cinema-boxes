@@ -13,3 +13,4 @@ data/cache/
 *.err
 
 .firebase/
+.firebaserc

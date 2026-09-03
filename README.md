@@ -11,8 +11,9 @@ audio, or video.
 
 Built for the Agentic Cinema hackathon, Parallel track.
 
-- Live app: https://helenia-11f98.web.app
-- Backend: https://boxes-api-383490753931.us-central1.run.app
+Deployed on Firebase Hosting (frontend) and Cloud Run (backend) under a Google
+Cloud project. Configure your own with `.env` / `web/.env` / `.firebaserc`
+(see the `*.example` files).
 
 ![Architecture](docs/architecture.png)
 
@@ -146,7 +147,7 @@ python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activ
 pip install -r requirements.txt -r service/requirements.txt
 cp .env.example .env                               # project id + Parallel key
 gcloud auth application-default login
-gcloud auth application-default set-quota-project helenia-11f98
+gcloud auth application-default set-quota-project YOUR_GCP_PROJECT
 ```
 
 Gemini 3.x and Gemini Embedding 2 are served on the Vertex `global` location, so
@@ -167,15 +168,15 @@ cd web && npm install && npm run dev                               # frontend on
 
 ```bash
 # backend
-gcloud run deploy boxes-api --source . --project helenia-11f98 --region us-central1 \
-  --service-account boxes-agent@helenia-11f98.iam.gserviceaccount.com \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=helenia-11f98,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=TRUE,FIREBASE_STORAGE_BUCKET=helenia-11f98.firebasestorage.app \
+gcloud run deploy boxes-api --source . --project YOUR_GCP_PROJECT --region us-central1 \
+  --service-account boxes-agent@YOUR_GCP_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_GCP_PROJECT,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=TRUE,FIREBASE_STORAGE_BUCKET=YOUR_GCP_PROJECT.firebasestorage.app \
   --set-secrets PARALLEL_API_KEY=PARALLEL_API_KEY:latest \
   --allow-unauthenticated --cpu 2 --memory 2Gi --timeout 3600 --max-instances 3
 
 # rules + frontend
-firebase deploy --only firestore:rules,storage --project helenia-11f98
-cd web && npm run build && cd .. && firebase deploy --only hosting --project helenia-11f98
+firebase deploy --only firestore:rules,storage --project YOUR_GCP_PROJECT
+cd web && npm run build && cd .. && firebase deploy --only hosting --project YOUR_GCP_PROJECT
 ```
 
 ## License
