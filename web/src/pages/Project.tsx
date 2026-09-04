@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
 import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { useBoxes, useEvidence, useProject, useReel, useRuns, useVerdicts } from "../data";
-import { ask, runProject, uploadResource } from "../api";
+import { ask, deleteProject, downloadReport, runProject, updateProject, uploadResource } from "../api";
 
 const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`;
 
 export function Project() {
   const { pid = "" } = useParams();
+  const nav = useNavigate();
   const project = useProject(pid);
   const boxes = useBoxes(pid);
   const evidence = useEvidence(pid);
@@ -25,8 +26,17 @@ export function Project() {
   const [liveEv, setLiveEv] = useState<any[]>([]);
   const [q, setQ] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [askErr, setAskErr] = useState("");
+  const [asked, setAsked] = useState(false);
   const [selBox, setSelBox] = useState<string | null>(null);
   const [uploadBox, setUploadBox] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editPremise, setEditPremise] = useState("");
+  const [editDepth, setEditDepth] = useState("scout");
+  const [saving, setSaving] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const boxName = useMemo(
     () => Object.fromEntries(boxes.map((b: any) => [b.id, b.name])),
@@ -70,8 +80,47 @@ export function Project() {
   };
 
   const doAsk = async () => {
-    if (!q.trim()) return;
-    setAnswers(await ask(pid, q.trim()).catch(() => []));
+    if (!q.trim() || asking) return;
+    setAsking(true); setAskErr(""); setAnswers([]); setAsked(true);
+    try {
+      setAnswers(await ask(pid, q.trim()));
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      setAskErr(
+        /no research yet/i.test(msg) ? "No research yet — run the agent first."
+        : /409/.test(msg) ? "Nothing indexed yet. Run the research, then ask."
+        : "Could not reach the index. Try again in a moment.",
+      );
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  const beginEdit = () => {
+    setEditPremise(project.premise || "");
+    setEditDepth(project.depth || "scout");
+    setEditing(true);
+  };
+  const saveEdit = async () => {
+    if (!editPremise.trim() || saving) return;
+    setSaving(true);
+    try {
+      await updateProject(pid, { premise: editPremise.trim(), depth: editDepth });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const getReport = async () => {
+    if (reporting) return;
+    setReporting(true);
+    try { await downloadReport(pid); }
+    catch { push("report failed — is the backend deployed?"); }
+    finally { setReporting(false); }
+  };
+  const doDelete = async () => {
+    await deleteProject(pid);
+    nav("/");
   };
   const doUpload = async (f: File) => {
     push(`uploading ${f.name} → ${boxName[uploadBox] || "unfiled"}`);
@@ -98,10 +147,35 @@ export function Project() {
         </div>
       </header>
 
-      <p className="premise">{project.premise}</p>
-      <button onClick={start} disabled={running}>
-        {running ? "Researching…" : runs.length ? "Research again" : "Start research"}
-      </button>
+      {editing ? (
+        <section className="card">
+          <h3>Edit project</h3>
+          <textarea rows={3} value={editPremise} onChange={(e) => setEditPremise(e.target.value)} />
+          <div className="row">
+            <select value={editDepth} onChange={(e) => setEditDepth(e.target.value)}>
+              <option value="scout">Scout · minutes</option>
+              <option value="production">Production · deeper</option>
+              <option value="kubrick">Kubrick · obsessive</option>
+            </select>
+            <button onClick={saveEdit} disabled={saving || !editPremise.trim()}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button className="ghost" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </section>
+      ) : (
+        <p className="premise">{project.premise}</p>
+      )}
+
+      <div className="row action-row">
+        <button onClick={start} disabled={running}>
+          {running ? "Researching…" : runs.length ? "Research again" : "Start research"}
+        </button>
+        <button className="ghost" onClick={getReport} disabled={reporting}>
+          {reporting ? "Building…" : "Download report"}
+        </button>
+        {!editing && <button className="ghost" onClick={beginEdit}>Edit</button>}
+      </div>
 
       {(running || progress.phase === "done") && (
         <ResearchConsole progress={progress} log={activity} done={!running && progress.phase === "done"} />
@@ -185,11 +259,16 @@ export function Project() {
       <section className="card">
         <h3>Ask the boxes</h3>
         <div className="row">
-          <input value={q} onChange={(e) => setQ(e.target.value)}
+          <input value={q} onChange={(e) => setQ(e.target.value)} disabled={asking}
                  placeholder="What would our characters actually see and hear?"
                  onKeyDown={(e) => e.key === "Enter" && doAsk()} />
-          <button onClick={doAsk}>Ask</button>
+          <button onClick={doAsk} disabled={asking || !q.trim()}>{asking ? "Asking…" : "Ask"}</button>
         </div>
+        {asking && <p className="muted">Consulting the index…</p>}
+        {askErr && <p className="muted err">{askErr}</p>}
+        {asked && !asking && !askErr && !answers.length && (
+          <p className="muted">No matching evidence in the index.</p>
+        )}
         {answers.map((a, i) => (
           <div className="answer" key={i}>
             {a.modality && a.modality !== "text" && <MediaBit e={a} />}
@@ -227,6 +306,21 @@ export function Project() {
           ))}
         </section>
       )}
+
+      <section className="card danger">
+        <h3>Danger zone</h3>
+        <div className="row">
+          <span className="muted">Delete this project and everything in it. This cannot be undone.</span>
+          {confirmDel ? (
+            <>
+              <button className="danger-btn" onClick={doDelete}>Delete for good</button>
+              <button className="ghost" onClick={() => setConfirmDel(false)}>Cancel</button>
+            </>
+          ) : (
+            <button className="ghost" onClick={() => setConfirmDel(true)}>Delete project</button>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
