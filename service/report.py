@@ -10,14 +10,17 @@ import io
 import time
 from xml.sax.saxutils import escape
 
+import httpx
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     Flowable,
     HRFlowable,
+    Image as RLImage,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -25,6 +28,15 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+from boxes.ontology import DEPARTMENTS
+
+_DEPT_LABEL = {
+    "script": "Script", "casting": "Casting", "costume": "Costume",
+    "art_direction": "Art direction", "sound": "Sound",
+    "cinematography": "Cinematography", "locations": "Locations",
+}
+_VISUAL_DEPTS = {"costume", "art_direction"}
 
 INK = colors.HexColor("#1c1a15")
 MUTED = colors.HexColor("#5f5a4e")
@@ -89,6 +101,38 @@ class Monolith(Flowable):
         c.line(0, self.height, self.width, self.height)
 
 
+def _fetch_thumb(url: str, *, w: float = 36 * mm) -> RLImage | None:
+    """Best-effort: a department moodboard is worth a slow fetch, not a broken
+    report. Any failure just drops that one thumbnail."""
+    try:
+        r = httpx.get(url, timeout=6.0, follow_redirects=True)
+        r.raise_for_status()
+        if len(r.content) > 8_000_000:
+            return None
+        reader = ImageReader(io.BytesIO(r.content))
+        iw, ih = reader.getSize()
+        h = w * (ih / iw) if iw else w
+        return RLImage(io.BytesIO(r.content), width=w, height=h)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _image_row(items: list[dict]):
+    cells = [img for img in (
+        _fetch_thumb(e.get("image_url") or e.get("media_url"))
+        for e in items if e.get("image_url") or e.get("media_url")
+    ) if img]
+    if not cells:
+        return None
+    t = Table([cells], colWidths=[38 * mm] * len(cells))
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    return t
+
+
 def _footer(canv, doc):
     canv.saveState()
     canv.setFont("Helvetica", 7)
@@ -99,7 +143,8 @@ def _footer(canv, doc):
 
 
 def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
-                     verdicts: list[dict], runs: list[dict], reel: list[dict]) -> bytes:
+                     verdicts: list[dict], runs: list[dict], reel: list[dict],
+                     prior_art: dict | None = None) -> bytes:
     premise = (project.get("premise") or "").strip()
     story: list = []
 
@@ -154,6 +199,31 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
             f"  ·  {b.get('distinct_domains', 0)} domains", _META))
     if not boxes:
         story.append(_p("No plan drawn yet.", _DIM))
+
+    # ---- departments: the same plan, sliced for the crews who brief off it --
+    story.append(_p("DEPARTMENTS", _H))
+    story.append(_rule())
+    box_by_dept: dict[str, list[dict]] = {}
+    for b in boxes:
+        for d in b.get("departments") or []:
+            box_by_dept.setdefault(d, []).append(b)
+    if not box_by_dept:
+        story.append(_p("No department tags on this plan yet.", _DIM))
+    for d in DEPARTMENTS:
+        dboxes = box_by_dept.get(d)
+        if not dboxes:
+            continue
+        story.append(_p(_DEPT_LABEL.get(d, d.title()), _SUB))
+        story.append(_p(
+            ", ".join(f"{b.get('name')} ({b.get('evidence_count', 0)})" for b in dboxes),
+            _BODY))
+        if d in _VISUAL_DEPTS:
+            ids = {b.get("id") for b in dboxes}
+            imgs = [e for e in evidence if e.get("objective_id") in ids
+                   and e.get("modality") == "image"][:4]
+            row = _image_row(imgs)
+            if row:
+                story.append(row)
 
     # ---- evidence by box ----------------------------------------------------
     story.append(PageBreak())
@@ -240,6 +310,43 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
                 story.append(_p(line, _META))
     if not reel:
         story.append(_p("No reel cut yet.", _DIM))
+
+    # ---- prior art ---------------------------------------------------------
+    if prior_art and prior_art.get("neighbors"):
+        story.append(PageBreak())
+        story.append(_p("PRIOR ART", _H))
+        story.append(_rule())
+        kws = ", ".join(prior_art.get("keywords") or [])
+        story.append(_p(
+            f"Surveyed {prior_art.get('surveyed', 0)} candidates"
+            + (f"  ·  seed keywords: {kws}" if kws else ""), _DIM))
+        story.append(_p(
+            "Originality is claimed only relative to the titles below, never absolutely.",
+            _META))
+        for nb in prior_art["neighbors"]:
+            title = f"{nb.get('title', '')} ({nb.get('year', '')})".strip()
+            story.append(_p(title, _SUB))
+            bits = " · ".join(x for x in [
+                nb.get("engine"), nb.get("pov"), nb.get("tone"), nb.get("moral_arc"), nb.get("ending"),
+            ] if x)
+            if bits:
+                story.append(_p(bits, _BODY))
+            tail = " · ".join(x for x in [
+                f"similarity {nb.get('similarity', 0):.2f}", nb.get("url"),
+            ] if x)
+            if tail:
+                story.append(_p(tail, _META))
+        if prior_art.get("unclaimed_angles"):
+            story.append(_p("Unclaimed angles", _SUB))
+            for a in prior_art["unclaimed_angles"]:
+                story.append(_p(a.get("angle", ""), _BODY))
+                if a.get("why"):
+                    story.append(_p(a["why"], _DIM))
+                ct = ", ".join(a.get("contrast_titles") or [])
+                if ct:
+                    story.append(_p(f"checked against: {ct}", _META))
+                if a.get("prompt"):
+                    story.append(_p(f"→ {a['prompt']}", _META))
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(

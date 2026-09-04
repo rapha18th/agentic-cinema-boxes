@@ -194,6 +194,15 @@ def set_reel(uid: str, pid: str, beats: list[dict]) -> None:
     _proj_ref(uid, pid).collection("meta").document("reel").set({"beats": beats})
 
 
+def set_prior_art(uid: str, pid: str, data: dict) -> None:
+    _proj_ref(uid, pid).collection("meta").document("prior_art").set(data)
+
+
+def get_prior_art(uid: str, pid: str) -> dict | None:
+    snap = _proj_ref(uid, pid).collection("meta").document("prior_art").get()
+    return snap.to_dict() if snap.exists else None
+
+
 # --------------------------------------------------------------------------- #
 # files
 # --------------------------------------------------------------------------- #

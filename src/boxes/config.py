@@ -28,18 +28,27 @@ CHAT_MODEL = os.environ.get("BOXES_CHAT_MODEL", "gemini-3.8-flash")
 AGENT_SA = os.environ.get("BOXES_AGENT_SA", "")
 
 PARALLEL_SEARCH_URL = os.environ.get("PARALLEL_SEARCH_URL", "https://api.parallel.ai/v1/search")
+TMDB_URL = os.environ.get("TMDB_URL", "https://api.themoviedb.org/3")
 
 
-def parallel_api_key() -> str | None:
-    """Key from the environment, else from Secret Manager secret PARALLEL_API_KEY."""
-    key = os.environ.get("PARALLEL_API_KEY")
-    if key:
-        return key
+def _secret(env_name: str) -> str | None:
+    """Value from the environment, else from Secret Manager secret of the same name."""
+    val = os.environ.get(env_name)
+    if val:
+        return val
     try:
         from google.cloud import secretmanager
 
         client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{PROJECT}/secrets/PARALLEL_API_KEY/versions/latest"
+        name = f"projects/{PROJECT}/secrets/{env_name}/versions/latest"
         return client.access_secret_version(name=name).payload.data.decode("utf-8").strip()
     except Exception:
         return None
+
+
+def parallel_api_key() -> str | None:
+    return _secret("PARALLEL_API_KEY")
+
+
+def tmdb_api_key() -> str | None:
+    return _secret("TMDB_API_KEY")

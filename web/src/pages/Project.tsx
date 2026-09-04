@@ -5,8 +5,11 @@ import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
 import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { useBoxes, useEvidence, useProject, useReel, useRuns, useVerdicts } from "../data";
-import { ask, deleteProject, downloadReport, runProject, updateProject, uploadResource } from "../api";
+import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVerdicts } from "../data";
+import {
+  ask, deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource,
+} from "../api";
+import { DEPARTMENTS, DEPT_LABEL } from "../departments";
 
 const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`;
 
@@ -19,6 +22,7 @@ export function Project() {
   const runs = useRuns(pid);
   const verdicts = useVerdicts(pid);
   const reel = useReel(pid);
+  const priorArtDoc = usePriorArt(pid);
 
   const [activity, setActivity] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -37,6 +41,10 @@ export function Project() {
   const [saving, setSaving] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [dept, setDept] = useState<string | null>(null);
+  const [surveying, setSurveying] = useState(false);
+  const [priorArtLocal, setPriorArtLocal] = useState<any>(null);
+  const priorArt = priorArtDoc || priorArtLocal;
 
   const boxName = useMemo(
     () => Object.fromEntries(boxes.map((b: any) => [b.id, b.name])),
@@ -51,6 +59,22 @@ export function Project() {
     () => (selBox ? allEvidence.filter((e: any) => e.objective_id === selBox) : []),
     [selBox, allEvidence],
   );
+
+  const deptsPresent = useMemo(() => {
+    const set = new Set<string>();
+    boxes.forEach((b: any) => (b.departments || []).forEach((d: string) => set.add(d)));
+    return DEPARTMENTS.filter((d) => set.has(d));
+  }, [boxes]);
+  const filteredBoxes = useMemo(
+    () => (dept ? boxes.filter((b: any) => (b.departments || []).includes(dept)) : boxes),
+    [boxes, dept],
+  );
+  const filteredEvidence = useMemo(() => {
+    if (!dept) return allEvidence;
+    const ids = new Set(filteredBoxes.map((b: any) => b.id));
+    return allEvidence.filter((e: any) => ids.has(e.objective_id));
+  }, [allEvidence, dept, filteredBoxes]);
+  const pickDept = (d: string | null) => { setDept(d); setSelBox(null); };
 
   const push = (s: string) => setActivity((a) => [...a.slice(-120), s]);
 
@@ -122,6 +146,13 @@ export function Project() {
     await deleteProject(pid);
     nav("/");
   };
+  const doSurvey = async () => {
+    if (surveying) return;
+    setSurveying(true);
+    try { setPriorArtLocal(await surveyPriorArt(pid)); }
+    catch { push("prior-art survey failed — is TMDB_API_KEY set on the backend?"); }
+    finally { setSurveying(false); }
+  };
   const doUpload = async (f: File) => {
     push(`uploading ${f.name} → ${boxName[uploadBox] || "unfiled"}`);
     await uploadResource(pid, f, uploadBox, "");
@@ -184,9 +215,20 @@ export function Project() {
       <div className="grid">
         <section className="card">
           <h3>Research map <span className="muted">{selBox ? "· click empty space to clear" : "· click a box"}</span></h3>
-          <ResearchMap boxes={boxes as any} evidence={allEvidence as any} selected={selBox} onSelect={setSelBox} />
+          {!!deptsPresent.length && (
+            <div className="dept-bar">
+              <button className={`chip ${!dept ? "on" : ""}`} onClick={() => pickDept(null)}>All</button>
+              {deptsPresent.map((d) => (
+                <button key={d} className={`chip ${dept === d ? "on" : ""}`}
+                        onClick={() => pickDept(dept === d ? null : d)}>
+                  {DEPT_LABEL[d] || d}
+                </button>
+              ))}
+            </div>
+          )}
+          <ResearchMap boxes={filteredBoxes as any} evidence={filteredEvidence as any} selected={selBox} onSelect={setSelBox} />
           <div className="boxwrap">
-            {[...boxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => {
+            {[...filteredBoxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => {
               const liveCount = allEvidence.filter((e: any) => e.objective_id === b.id).length;
               return (
                 <button className={`box ${selBox === b.id ? "on" : ""}`} key={b.id}
@@ -242,6 +284,65 @@ export function Project() {
           </div>
         ))}
         {!verdicts.length && <p className="muted">None found.</p>}
+      </section>
+
+      <section className="card">
+        <h3>Prior art <span className="muted">· TMDB + web, ranked by meaning not genre</span></h3>
+        {!priorArt && !surveying && (
+          <>
+            <p className="muted">
+              Survey films with a similar premise and see where this one is still unclaimed.
+            </p>
+            <button onClick={doSurvey}>Survey prior art</button>
+          </>
+        )}
+        {surveying && <p className="muted">Surveying TMDB and the web… this can take a minute.</p>}
+        {priorArt && !!priorArt.neighbors?.length && (
+          <>
+            <p className="muted">
+              {priorArt.surveyed} candidates surveyed
+              {priorArt.keywords?.length ? `  ·  seed: ${priorArt.keywords.join(", ")}` : ""}
+            </p>
+            <div className="neighborgrid">
+              {priorArt.neighbors.map((n: any, i: number) => (
+                <a className="neighbor" key={i} href={n.url} target="_blank" rel="noopener">
+                  {n.poster_url
+                    ? <img className="neighbor-poster" src={n.poster_url} alt="" loading="lazy" />
+                    : <div className="neighbor-poster neighbor-poster-blank">{(n.title || "?")[0]}</div>}
+                  <div className="neighbor-title">{n.title} <span className="muted">{n.year}</span></div>
+                  <div className="muted neighbor-tags">
+                    {[n.pov, n.tone, n.engine].filter(Boolean).join(" · ")}
+                  </div>
+                  <div className="muted">similarity {Math.round((n.similarity ?? 0) * 100)}%</div>
+                </a>
+              ))}
+            </div>
+            {!!priorArt.unclaimed_angles?.length && (
+              <>
+                <h3>Unclaimed angles</h3>
+                {priorArt.unclaimed_angles.map((a: any, i: number) => (
+                  <div className="verdict angle" key={i}>
+                    <div>{a.angle}</div>
+                    {a.why && <div className="muted">{a.why}</div>}
+                    {!!a.contrast_titles?.length && (
+                      <div className="muted">checked against: {a.contrast_titles.join(", ")}</div>
+                    )}
+                    {a.prompt && <div className="muted">→ {a.prompt}</div>}
+                  </div>
+                ))}
+              </>
+            )}
+            <button className="ghost" onClick={doSurvey} disabled={surveying}>
+              {surveying ? "Surveying…" : "Re-survey"}
+            </button>
+          </>
+        )}
+        {priorArt && !priorArt.neighbors?.length && !surveying && (
+          <>
+            <p className="muted">No candidates found. Add a TMDB key on the backend and try again.</p>
+            <button className="ghost" onClick={doSurvey}>Re-survey</button>
+          </>
+        )}
       </section>
 
       <section className="card">

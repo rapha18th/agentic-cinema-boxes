@@ -55,6 +55,14 @@ export async function downloadReport(pid: string) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+export async function surveyPriorArt(pid: string) {
+  const r = await fetch(`${BASE}/api/projects/${pid}/prior-art`, {
+    method: "POST", headers: await headers(),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
 export async function ask(pid: string, question: string) {
   const r = await fetch(`${BASE}/api/projects/${pid}/ask`, {
     method: "POST", headers: await headers(), body: JSON.stringify({ question }),

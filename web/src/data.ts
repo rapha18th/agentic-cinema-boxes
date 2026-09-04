@@ -47,3 +47,15 @@ export function useReel(pid: string) {
   }, [user, pid]);
   return beats;
 }
+
+export function usePriorArt(pid: string) {
+  const { user } = useAuth();
+  const [data, setData] = useState<any>(null);
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(doc(base(user.uid, pid), "meta", "prior_art"), (s) =>
+      setData(s.exists() ? s.data() : null),
+    );
+  }, [user, pid]);
+  return data;
+}
