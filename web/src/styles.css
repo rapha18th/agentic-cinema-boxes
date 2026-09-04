@@ -104,8 +104,8 @@ a { color:#9db4ff; }
 .more-src { font-size:11px; color:var(--muted); }
 
 /* ── landing: minimalist, Kubrick one-point perspective ─────────────── */
-.landing { position:fixed; inset:0; background:#000; color:#fff; overflow:hidden;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
+.landing { position:fixed; inset:0; background:#000; color:#fff; overflow-y:auto;
+  display:flex; flex-direction:column; align-items:center;
   text-align:center; padding:24px; }
 .landing-floor { position:absolute; left:50%; bottom:0; width:240vmax; height:64vh;
   transform:translateX(-50%); pointer-events:none;
@@ -113,8 +113,8 @@ a { color:#9db4ff; }
     #101010 0deg .8deg, transparent .8deg 9deg);
   -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 66%);
   mask-image:linear-gradient(to top, #000 0%, transparent 66%); }
-.landing-content { position:relative; display:flex; flex-direction:column;
-  align-items:center; gap:24px; max-width:540px; }
+.landing-content { position:relative; margin:auto 0; padding:44px 0; display:flex;
+  flex-direction:column; align-items:center; gap:24px; max-width:540px; }
 .landing-eyebrow { margin:0; font-size:11px; letter-spacing:.44em; text-indent:.44em;
   text-transform:uppercase; color:#6a6a6a; }
 .landing-monolith { width:clamp(72px, 10vw, 104px); aspect-ratio:4 / 9;
@@ -132,7 +132,7 @@ a { color:#9db4ff; }
   letter-spacing:.36em; text-indent:.36em; }
 .landing-lede { margin:0; max-width:40ch; font-weight:300; font-size:15px; line-height:1.75;
   color:#9a9a9a; }
-.landing-foot { position:absolute; bottom:22px; margin:0; font-size:11px; letter-spacing:.22em;
+.landing-foot { flex:none; margin:0; padding-top:8px; font-size:11px; letter-spacing:.22em;
   color:#565656; }
 
 /* Google-branded sign-in button — the one point of colour on the page */
