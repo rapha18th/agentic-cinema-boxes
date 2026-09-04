@@ -193,11 +193,14 @@ _UA = {"User-Agent": "the-boxes-research/0.1"}
 
 
 def _get_html(page_url: str, timeout: float = 8.0) -> str:
+    # Best-effort fetch of a third-party page. Malformed scraped URLs fail in
+    # whatever way the network stack finds first (bad IDNA host, refused
+    # connection, decode error) — none of it should ever take the caller down.
     try:
         r = httpx.get(page_url, timeout=timeout, follow_redirects=True, headers=_UA)
         r.raise_for_status()
         return r.text
-    except (httpx.HTTPError, UnicodeDecodeError):
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -246,11 +249,13 @@ def _page_media(html: str, page_url: str) -> list[tuple[str, str]]:
 
 
 def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] | None:
-    """want: 'image' | 'pdf' | 'audio' | 'video'. Returns (bytes, mime) or None."""
+    """want: 'image' | 'pdf' | 'audio' | 'video'. Returns (bytes, mime) or None.
+    Same rationale as _get_html: a scraped asset URL can be malformed in ways
+    that surface anywhere from URL parsing to DNS to the socket layer."""
     try:
         r = httpx.get(url, timeout=timeout, follow_redirects=True, headers=_UA)
         r.raise_for_status()
-    except httpx.HTTPError:
+    except Exception:  # noqa: BLE001
         return None
     data = r.content
     ct = r.headers.get("content-type", "").split(";")[0].strip().lower()
