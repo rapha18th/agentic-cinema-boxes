@@ -28,6 +28,7 @@ from boxes import reel as reel_mod  # noqa: E402
 from boxes.depth import get as get_depth  # noqa: E402
 from boxes.embeddings import embed_texts, embed_parts, image_part, TASK_SEARCH  # noqa: E402
 from boxes.evidence import Evidence  # noqa: E402
+from boxes import prior_art as prior_art_mod  # noqa: E402
 
 import auth  # noqa: E402
 import report  # noqa: E402
@@ -121,6 +122,7 @@ def project_report(pid: str, uid: str = Depends(auth.current_uid)) -> Response:
         verdicts=store.list_verdicts(uid, pid),
         runs=store.list_runs(uid, pid),
         reel=store.get_reel(uid, pid),
+        prior_art=store.get_prior_art(uid, pid),
     )
     stub = "".join(c if c.isalnum() else "-" for c in (p.get("premise") or "boxes"))[:40].strip("-")
     return Response(
@@ -216,6 +218,26 @@ def run_project(pid: str, uid: str = Depends(auth.current_uid)) -> StreamingResp
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# --------------------------------------------------------------------------- #
+# prior art: where this premise sits against films that already exist
+# --------------------------------------------------------------------------- #
+@app.post("/api/projects/{pid}/prior-art")
+def survey_prior_art(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
+    p = store.get_project(uid, pid)
+    if not p:
+        raise HTTPException(404, "not found")
+    report_data = prior_art_mod.survey(p["premise"]).to_dict()
+    store.set_prior_art(uid, pid, report_data)
+    return report_data
+
+
+@app.get("/api/projects/{pid}/prior-art")
+def get_prior_art(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
+    if not store.get_project(uid, pid):
+        raise HTTPException(404, "not found")
+    return store.get_prior_art(uid, pid) or {}
 
 
 # --------------------------------------------------------------------------- #
