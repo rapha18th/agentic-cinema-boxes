@@ -19,10 +19,12 @@ interface Ev {
   title?: string;
 }
 
+// A filmic set: distinguishable per box, but harmonised and slightly
+// desaturated so the canvas reads as one image rather than a legend.
 const PALETTE = [
-  "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-  "#42d4f4", "#f032e6", "#bfef45", "#fabed4", "#469990",
-  "#9A6324", "#800000", "#aaffc3", "#000075", "#a9a9a9",
+  "#e4572e", "#f6ae2d", "#d4b483", "#e0c1b3", "#c98986",
+  "#8f6c4f", "#5b8a72", "#4c9f9f", "#5c7aa8", "#7b6d8d",
+  "#9a6fb0", "#c25b7c", "#a7c957", "#6a994e", "#adb5bd",
 ];
 
 /** A dark canvas of research. Each box is a cluster; each evidence fragment a
@@ -75,11 +77,25 @@ export function ResearchMap({
       <svg className="map" viewBox={`0 0 ${W} ${H}`} width="100%"
            onClick={() => onSelect(null)}>
         <defs>
+          <radialGradient id="map-depth" cx="50%" cy="50%" r="72%">
+            <stop offset="55%" stopColor="var(--map-bg)" />
+            <stop offset="100%" stopColor="var(--map-edge)" />
+          </radialGradient>
           {dots.filter((d) => d.isImg).map((d) => (
             <clipPath id={`c-${d.e.id}`} key={d.e.id}><circle cx={d.x} cy={d.y} r={9} /></clipPath>
           ))}
         </defs>
-        <rect x={0} y={0} width={W} height={H} fill="#0b0d17" rx={10} />
+        <rect x={0} y={0} width={W} height={H} fill="url(#map-depth)" rx={10} />
+
+        {/* one plan, radiating into objectives — echoes the landing floor */}
+        {boxes.map((b) => {
+          const c = centers[b.id];
+          return c ? (
+            <line key={`spoke-${b.id}`} x1={W / 2} y1={H / 2} x2={c.x} y2={c.y}
+                  stroke="var(--map-grid)" strokeWidth={1} />
+          ) : null;
+        })}
+        <circle cx={W / 2} cy={H / 2} r={2.5} fill="var(--map-ink)" opacity={0.45} />
 
         {boxes.map((b) => {
           const c = centers[b.id];
@@ -89,7 +105,7 @@ export function ResearchMap({
             <g key={b.id} opacity={dim ? 0.25 : 1} style={{ cursor: "pointer" }}
                onClick={(ev) => { ev.stopPropagation(); onSelect(selected === b.id ? null : b.id); }}>
               {b.emergent && (
-                <circle cx={c.x} cy={c.y} r={52} fill="none" stroke="#ffd166" strokeWidth={1.5}>
+                <circle cx={c.x} cy={c.y} r={52} fill="none" stroke="var(--map-accent)" strokeWidth={1.5}>
                   <animate attributeName="r" values="30;58;30" dur="2.4s" repeatCount="indefinite" />
                   <animate attributeName="opacity" values="0.9;0.12;0.9" dur="2.4s" repeatCount="indefinite" />
                 </circle>
@@ -97,7 +113,7 @@ export function ResearchMap({
               <circle cx={c.x} cy={c.y} r={Math.max(7, (b.score ?? 0) * 18)}
                       fill={c.color} opacity={selected === b.id ? 0.4 : 0.2}
                       stroke={selected === b.id ? c.color : "none"} strokeWidth={1.5} />
-              <text x={c.x} y={c.y - 62} fill="#c7ccd8" fontSize={10} textAnchor="middle"
+              <text x={c.x} y={c.y - 62} fill="var(--map-ink)" fontSize={10} textAnchor="middle"
                     fontWeight={selected === b.id ? 700 : 400}>
                 {b.name}{b.emergent ? " ✦" : ""}
               </text>
@@ -135,7 +151,7 @@ export function ResearchMap({
           }
           return (
             <circle key={i} cx={d.x} cy={d.y} r={d.director ? 3.8 : 2.7}
-                    fill={d.color} stroke={d.director ? "#ffd166" : "none"} strokeWidth={d.director ? 1 : 0}
+                    fill={d.color} stroke={d.director ? "var(--map-accent)" : "none"} strokeWidth={d.director ? 1 : 0}
                     {...common} />
           );
         })}

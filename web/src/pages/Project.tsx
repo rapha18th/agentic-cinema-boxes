@@ -4,6 +4,7 @@ import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
 import { ResearchConsole, type Progress } from "../components/ResearchConsole";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { useBoxes, useEvidence, useProject, useReel, useRuns, useVerdicts } from "../data";
 import { ask, runProject, uploadResource } from "../api";
 
@@ -78,14 +79,22 @@ export function Project() {
     push(`indexed ${f.name}`);
   };
 
-  if (!project) return <div className="wrap"><Link to="/">← projects</Link><p>Loading…</p></div>;
+  if (!project) return (
+    <div className="wrap">
+      <header><Link to="/" className="ghost">← projects</Link><ThemeToggle /></header>
+      <p className="muted">Loading…</p>
+    </div>
+  );
 
   return (
     <div className="wrap">
       <header>
         <Link to="/" className="ghost">← projects</Link>
-        <div className="conf">
-          confidence <b>{pct(project.confidence)}</b> · coverage {pct(project.coverage)} · {project.status}
+        <div className="head-actions">
+          <div className="conf">
+            confidence <b>{pct(project.confidence)}</b> · coverage {pct(project.coverage)} · {project.status}
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
