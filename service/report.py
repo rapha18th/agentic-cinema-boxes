@@ -1,7 +1,9 @@
 """Assemble a project's full research into a typeset PDF dossier.
 
 Same restraint as the app: near-white ground, hairline rules, one accent, the
-monolith on the cover. Text-first — every claim carries its citation.
+monolith on the cover. The dossier is written for a human who has never seen
+the project: every box opens with a plain-prose summary before its sources,
+so the report stands on its own. Every claim still carries a citation.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from boxes import synthesis
 from boxes.ontology import DEPARTMENTS
 
 _DEPT_LABEL = {
@@ -52,16 +55,20 @@ _TITLE = ParagraphStyle("title", fontName="Helvetica", fontSize=22, leading=26,
 _KICKER = ParagraphStyle("kicker", fontName="Helvetica", fontSize=8, leading=12,
                          textColor=FAINT, spaceAfter=16)
 _PREMISE = ParagraphStyle("premise", fontName="Helvetica", fontSize=13, leading=18,
-                          textColor=INK, spaceBefore=6, spaceAfter=14)
+                          textColor=INK, spaceBefore=6, spaceAfter=10)
+_LEAD = ParagraphStyle("lead", fontName="Helvetica", fontSize=10, leading=15.5,
+                       textColor=MUTED, spaceAfter=14)
 _H = ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=11, leading=14,
                     textColor=MUTED, spaceBefore=18, spaceAfter=4)
+_INTRO = ParagraphStyle("intro", fontName="Helvetica-Oblique", fontSize=8.5, leading=12,
+                        textColor=FAINT, spaceAfter=8)
 _SUB = ParagraphStyle("sub", fontName="Helvetica-Bold", fontSize=9.5, leading=13,
                       textColor=ACCENT, spaceBefore=10, spaceAfter=2)
-_BODY = ParagraphStyle("body", fontName="Helvetica", fontSize=9, leading=12.5,
+_BODY = ParagraphStyle("body", fontName="Helvetica", fontSize=9, leading=13,
                        textColor=INK, alignment=TA_LEFT, spaceAfter=3)
 _DIM = ParagraphStyle("dim", fontName="Helvetica", fontSize=8, leading=11,
                       textColor=MUTED, spaceAfter=2)
-_META = ParagraphStyle("meta", fontName="Helvetica", fontSize=7.5, leading=10,
+_META = ParagraphStyle("meta", fontName="Helvetica", fontSize=7.5, leading=11.5,
                        textColor=FAINT, spaceAfter=8)
 
 
@@ -72,8 +79,19 @@ def _pct(x) -> str:
         return "0%"
 
 
+def _val(x) -> float:
+    try:
+        return max(0.0, min(1.0, float(x or 0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _p(text, style) -> Paragraph:
     return Paragraph(escape(str(text if text is not None else "")), style)
+
+
+def _p_lines(lines: list[str], style) -> Paragraph:
+    return Paragraph("<br/>".join(escape(x) for x in lines), style)
 
 
 def _rule():
@@ -99,6 +117,55 @@ class Monolith(Flowable):
         c.setStrokeColor(colors.HexColor("#8a8272"))
         c.setLineWidth(0.8)
         c.line(0, self.height, self.width, self.height)
+
+
+class Bar(Flowable):
+    """A thin proportional bar — the same meter language as the app's
+    confidence/coverage bars."""
+
+    def __init__(self, value: float, width: float = 60 * mm, height: float = 5):
+        super().__init__()
+        self.value = _val(value)
+        self.width = width
+        self.height = height
+
+    def wrap(self, *_):
+        return (self.width, self.height)
+
+    def draw(self):
+        c = self.canv
+        c.setFillColor(LINE)
+        c.rect(0, 0, self.width, self.height, stroke=0, fill=1)
+        if self.value > 0:
+            c.setFillColor(ACCENT)
+            c.rect(0, 0, self.width * self.value, self.height, stroke=0, fill=1)
+
+
+def _bar_row(pct_text: str, value: float, tail: str = "", *, bar_w: float = 46 * mm):
+    """label-width percentage, a meter, then a trailing stat line."""
+    cell = Table([[_p(pct_text, _BODY), Bar(value, width=bar_w), _p(tail, _META)]],
+                colWidths=[13 * mm, bar_w + 4, PAGE_W - 2 * MARGIN - 13 * mm - bar_w - 4])
+    cell.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    return cell
+
+
+def _pullquote(flowables: list) -> Table:
+    """A left accent bar beside a block of flowables — for a claim worth
+    pausing on, not just another bullet."""
+    t = Table([["", flowables]],
+             colWidths=[2.4, PAGE_W - 2 * MARGIN - 2.4])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), ACCENT),
+        ("LEFTPADDING", (1, 0), (1, -1), 10), ("RIGHTPADDING", (1, 0), (1, -1), 0),
+        ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (0, 0), (0, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return t
 
 
 def _fetch_thumb(url: str, *, w: float = 36 * mm) -> RLImage | None:
@@ -142,66 +209,159 @@ def _footer(canv, doc):
     canv.restoreState()
 
 
+def _source_line(e: dict) -> str:
+    cite = " · ".join(x for x in [
+        e.get("title") or e.get("source_domain") or e.get("url"), e.get("publish_date"),
+    ] if x)
+    own = "  ·  your upload" if e.get("source") == "director" else ""
+    return f"• {cite}{own}"
+
+
+def _dedup_lines(items: list[dict], key_fn, line_fn, *, cap: int) -> list[str]:
+    """A research pass often harvests several fragments off the same page
+    (a paragraph plus three photos). One reader-facing source list should
+    name that page once, not three times."""
+    seen: set[str] = set()
+    lines: list[str] = []
+    for it in items:
+        key = (key_fn(it) or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        lines.append(line_fn(it))
+        if len(lines) >= cap:
+            break
+    return lines
+
+
+def _cite_key(e: dict) -> str:
+    return e.get("title") or e.get("source_domain") or e.get("url") or ""
+
+
 def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
                      verdicts: list[dict], runs: list[dict], reel: list[dict],
                      prior_art: dict | None = None) -> bytes:
     premise = (project.get("premise") or "").strip()
     story: list = []
 
-    # ---- cover -------------------------------------------------------------
-    story += [Spacer(1, 26 * mm), Monolith(), Spacer(1, 12 * mm)]
+    try:
+        narrative = synthesis.build(premise, boxes, evidence, prior_art)
+    except Exception:  # noqa: BLE001
+        # The narrative is enrichment. A flaky model call should never break
+        # the download — packets fall back to their plan-time description.
+        narrative = synthesis.Narrative()
+
+    by_id = {b.get("id"): b for b in boxes}
+    grouped: dict[str, list[dict]] = {}
+    for e in evidence:
+        grouped.setdefault(e.get("objective_id") or "_unfiled", []).append(e)
+    ordered_boxes = sorted(boxes, key=lambda x: -(x.get("score") or 0))
+
+    # ---- cover: the picture, in full, before anything else -----------------
+    story += [Spacer(1, 22 * mm), Monolith(), Spacer(1, 10 * mm)]
     story.append(_p("THE BOXES", _TITLE))
     story.append(_p("Research dossier", _KICKER))
     story.append(_p(premise or "Untitled project", _PREMISE))
+    if narrative.overview:
+        story.append(_p(narrative.overview, _LEAD))
     story.append(_rule())
 
     domains = {e.get("source_domain") for e in evidence if e.get("source_domain")}
     sources = {e.get("url") for e in evidence if e.get("url")}
     conflicts = [v for v in verdicts if v.get("relation") == "contradicts"]
     facts = [
-        ("Depth", str(project.get("depth", "scout")).title()),
-        ("Research confidence", _pct(project.get("confidence"))),
-        ("Coverage", _pct(project.get("coverage"))),
-        ("Status", str(project.get("status", "—"))),
-        ("Boxes", str(len(boxes))),
-        ("Evidence fragments", str(len(evidence))),
-        ("Distinct sources", str(len(sources))),
-        ("Distinct domains", str(len(domains))),
-        ("Contradictions", f"{len(conflicts)} conflict, {len(verdicts) - len(conflicts)} context"),
-        ("Research passes", str(len(runs))),
-        ("Generated", time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())),
-        ("Project id", str(project.get("id", ""))),
+        ("Depth", _p(str(project.get("depth", "scout")).title(), _BODY)),
+        ("Research confidence", _bar_row(_pct(project.get("confidence")), project.get("confidence"))),
+        ("Coverage", _bar_row(_pct(project.get("coverage")), project.get("coverage"))),
+        ("Status", _p(str(project.get("status", "—")), _BODY)),
+        ("Boxes", _p(str(len(boxes)), _BODY)),
+        ("Evidence fragments", _p(str(len(evidence)), _BODY)),
+        ("Distinct sources", _p(str(len(sources)), _BODY)),
+        ("Distinct domains", _p(str(len(domains)), _BODY)),
+        ("Contradictions", _p(f"{len(conflicts)} conflict, {len(verdicts) - len(conflicts)} context", _BODY)),
+        ("Research passes", _p(str(len(runs)), _BODY)),
+        ("Generated", _p(time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), _BODY)),
+        ("Project id", _p(str(project.get("id", "")), _BODY)),
     ]
-    t = Table([[_p(k, _DIM), _p(v, _BODY)] for k, v in facts],
-              colWidths=[46 * mm, PAGE_W - 2 * MARGIN - 46 * mm])
+    t = Table([[_p(k, _DIM), v] for k, v in facts],
+              colWidths=[42 * mm, PAGE_W - 2 * MARGIN - 42 * mm])
     t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("LINEBELOW", (0, 0), (-1, -2), 0.25, LINE),
     ]))
     story.append(t)
     story.append(PageBreak())
 
-    # ---- the plan --------------------------------------------------------
-    story.append(_p("THE PLAN", _H))
+    # ---- the boxes: one packet per box — summary first, sources after ------
+    story.append(_p("THE BOXES", _H))
+    story.append(_p(
+        "What the research found, in plain language, box by box. Every claim "
+        "below is traceable to the sources listed under it.", _INTRO))
     story.append(_rule())
-    by_id = {b.get("id"): b for b in boxes}
-    for b in sorted(boxes, key=lambda x: -(x.get("score") or 0)):
-        tag = "  (emergent)" if b.get("emergent") else ""
+    for b in ordered_boxes:
+        bid = b.get("id")
+        tag = "  ·  emergent" if b.get("emergent") else ""
         story.append(_p((b.get("name") or "UNNAMED") + tag, _SUB))
-        if b.get("description"):
-            story.append(_p(b["description"], _BODY))
-        if b.get("rationale"):
-            story.append(_p(f"Why: {b['rationale']}", _DIM))
-        story.append(_p(
-            f"coverage {_pct(b.get('score'))}  ·  {b.get('evidence_count', 0)} items"
-            f"  ·  {b.get('distinct_domains', 0)} domains", _META))
+        story.append(_bar_row(
+            _pct(b.get("score")), b.get("score") or 0,
+            f"{b.get('evidence_count', 0)} items  ·  {b.get('distinct_domains', 0)} domains"))
+        summary = narrative.box_summaries.get(bid) or b.get("description", "")
+        if summary:
+            story.append(_p(summary, _BODY))
+        items = grouped.get(bid, [])
+        if items:
+            lines = _dedup_lines(items, _cite_key, _source_line, cap=15)
+            story.append(_p_lines(lines, _META))
+        story.append(Spacer(1, 8))
+    unfiled = grouped.get("_unfiled")
+    if unfiled:
+        story.append(_p("UNFILED", _SUB))
+        story.append(_p_lines(_dedup_lines(unfiled, _cite_key, _source_line, cap=15), _META))
     if not boxes:
         story.append(_p("No plan drawn yet.", _DIM))
 
-    # ---- departments: the same plan, sliced for the crews who brief off it --
+    # ---- contradictions ----------------------------------------------------
+    story.append(PageBreak())
+    story.append(_p("CONTRADICTIONS", _H))
+    story.append(_p(
+        "Where two sources disagree. Similarity alone never decides this; "
+        "each pair below was read and judged.", _INTRO))
+    story.append(_rule())
+    for v in verdicts:
+        story.append(_p((v.get("relation") or "").upper(), _SUB))
+        if v.get("explanation"):
+            story.append(_p(v["explanation"], _BODY))
+        story.append(_p(f"A  —  {v.get('a_cite', '')}", _DIM))
+        story.append(_p(f"B  —  {v.get('b_cite', '')}", _DIM))
+    if not verdicts:
+        story.append(_p("None found.", _DIM))
+
+    # ---- reference reel ------------------------------------------------------
+    story.append(PageBreak())
+    story.append(_p("REFERENCE REEL", _H))
+    story.append(_p("The strongest material, cut into a sequence a director can read.", _INTRO))
+    story.append(_rule())
+    for b in reel:
+        story.append(_p(f"{b.get('t', '00:00')}   {b.get('title', '')}", _SUB))
+        if b.get("note"):
+            story.append(_p(b["note"], _BODY))
+        lines = _dedup_lines(
+            b.get("sources") or [],
+            lambda s: s.get("cite") or s.get("url") or "",
+            lambda s: "• " + (s.get("cite") or s.get("url") or ""),
+            cap=6,
+        )
+        if lines:
+            story.append(_p_lines(lines, _META))
+    if not reel:
+        story.append(_p("No reel cut yet.", _DIM))
+
+    # ---- departments: the same research, sliced by who needs it ------------
+    story.append(PageBreak())
     story.append(_p("DEPARTMENTS", _H))
+    story.append(_p("The same boxes, grouped by which crew briefs off them.", _INTRO))
     story.append(_rule())
     box_by_dept: dict[str, list[dict]] = {}
     for b in boxes:
@@ -225,60 +385,52 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
             if row:
                 story.append(row)
 
-    # ---- evidence by box ----------------------------------------------------
-    story.append(PageBreak())
-    story.append(_p("EVIDENCE", _H))
-    story.append(_rule())
-    grouped: dict[str, list[dict]] = {}
-    for e in evidence:
-        grouped.setdefault(e.get("objective_id") or "_unfiled", []).append(e)
-
-    order = [b.get("id") for b in sorted(boxes, key=lambda x: -(x.get("score") or 0))]
-    order += [k for k in grouped if k not in order]
-    for key in order:
-        items = grouped.get(key)
-        if not items:
-            continue
-        name = by_id.get(key, {}).get("name") or ("UNFILED" if key == "_unfiled" else key)
-        story.append(_p(f"{name}  ({len(items)})", _SUB))
-        for e in items:
-            cite = " · ".join(x for x in [
-                e.get("title") or e.get("source_domain") or e.get("url"),
-                e.get("publish_date"),
+    # ---- prior art -----------------------------------------------------------
+    if prior_art and prior_art.get("neighbors"):
+        story.append(PageBreak())
+        story.append(_p("PRIOR ART", _H))
+        kws = ", ".join(prior_art.get("keywords") or [])
+        story.append(_p(
+            f"{prior_art.get('surveyed', 0)} existing films surveyed for a similar premise"
+            + (f", seeded from: {kws}." if kws else "."), _INTRO))
+        story.append(_rule())
+        for nb in prior_art["neighbors"]:
+            title = f"{nb.get('title', '')} ({nb.get('year', '')})".strip()
+            story.append(_p(title, _SUB))
+            bits = " · ".join(x for x in [
+                nb.get("engine"), nb.get("pov"), nb.get("tone"), nb.get("moral_arc"), nb.get("ending"),
             ] if x)
-            own = "  ·  your upload" if e.get("source") == "director" else ""
-            story.append(_p(f"• {cite}{own}", _BODY))
-            snippet = (e.get("text") or "").strip().replace("\n", " ")
-            if snippet:
-                story.append(_p(snippet[:320] + ("…" if len(snippet) > 320 else ""), _DIM))
-            tail = "  ·  ".join(x for x in [
-                e.get("modality", "text"),
-                e.get("url"),
-                e.get("license_note"),
+            if bits:
+                story.append(_p(bits, _BODY))
+            tail = " · ".join(x for x in [
+                f"similarity {nb.get('similarity', 0):.2f}", nb.get("url"),
             ] if x)
             if tail:
                 story.append(_p(tail, _META))
-    if not evidence:
-        story.append(_p("No evidence indexed yet.", _DIM))
+        if prior_art.get("unclaimed_angles"):
+            story.append(_p("Where this stands, and where it does not yet", _SUB))
+            story.append(_p(
+                "Originality is claimed only relative to the titles above, never absolutely.",
+                _META))
+            for a in prior_art["unclaimed_angles"]:
+                block = [_p(a.get("angle", ""), _BODY)]
+                if a.get("why"):
+                    block.append(_p(a["why"], _DIM))
+                ct = ", ".join(a.get("contrast_titles") or [])
+                if ct:
+                    block.append(_p(f"checked against: {ct}", _META))
+                if a.get("prompt"):
+                    block.append(_p(f"→ {a['prompt']}", _META))
+                story.append(_pullquote(block))
+                story.append(Spacer(1, 4))
 
-    # ---- contradictions --------------------------------------------------
+    # ---- research log: the process trail, last ------------------------------
     story.append(PageBreak())
-    story.append(_p("CONTRADICTIONS", _H))
-    story.append(_rule())
-    for v in verdicts:
-        story.append(_p((v.get("relation") or "").upper(), _SUB))
-        if v.get("explanation"):
-            story.append(_p(v["explanation"], _BODY))
-        story.append(_p(f"A  —  {v.get('a_cite', '')}", _DIM))
-        story.append(_p(f"B  —  {v.get('b_cite', '')}", _DIM))
-    if not verdicts:
-        story.append(_p("None found.", _DIM))
-
-    # ---- ledger ----------------------------------------------------------
-    story.append(_p("RESEARCH LEDGER", _H))
+    story.append(_p("RESEARCH LOG", _H))
+    story.append(_p("What each pass searched, found, and did next. Process detail, not required reading.", _INTRO))
     story.append(_rule())
     for r in runs:
-        story.append(_p(f"RUN {str(r.get('run', 0)).zfill(3)}", _SUB))
+        story.append(_p(f"PASS {str(r.get('run', 0)).zfill(3)}", _SUB))
         story.append(_p(
             f"{r.get('sources_examined', 0)} sources  ·  {r.get('evidence_indexed', 0)} fragments"
             f"  ·  {r.get('sources_extracted', 0)} via Extract", _DIM))
@@ -295,58 +447,6 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
             story.append(_p(f"→ {r['next_action']}", _META))
     if not runs:
         story.append(_p("No research run yet.", _DIM))
-
-    # ---- reference reel --------------------------------------------------
-    story.append(PageBreak())
-    story.append(_p("REFERENCE REEL", _H))
-    story.append(_rule())
-    for b in reel:
-        story.append(_p(f"{b.get('t', '00:00')}   {b.get('title', '')}", _SUB))
-        if b.get("note"):
-            story.append(_p(b["note"], _BODY))
-        for s in b.get("sources", []) or []:
-            line = " — ".join(x for x in [s.get("cite"), s.get("url")] if x)
-            if line:
-                story.append(_p(line, _META))
-    if not reel:
-        story.append(_p("No reel cut yet.", _DIM))
-
-    # ---- prior art ---------------------------------------------------------
-    if prior_art and prior_art.get("neighbors"):
-        story.append(PageBreak())
-        story.append(_p("PRIOR ART", _H))
-        story.append(_rule())
-        kws = ", ".join(prior_art.get("keywords") or [])
-        story.append(_p(
-            f"Surveyed {prior_art.get('surveyed', 0)} candidates"
-            + (f"  ·  seed keywords: {kws}" if kws else ""), _DIM))
-        story.append(_p(
-            "Originality is claimed only relative to the titles below, never absolutely.",
-            _META))
-        for nb in prior_art["neighbors"]:
-            title = f"{nb.get('title', '')} ({nb.get('year', '')})".strip()
-            story.append(_p(title, _SUB))
-            bits = " · ".join(x for x in [
-                nb.get("engine"), nb.get("pov"), nb.get("tone"), nb.get("moral_arc"), nb.get("ending"),
-            ] if x)
-            if bits:
-                story.append(_p(bits, _BODY))
-            tail = " · ".join(x for x in [
-                f"similarity {nb.get('similarity', 0):.2f}", nb.get("url"),
-            ] if x)
-            if tail:
-                story.append(_p(tail, _META))
-        if prior_art.get("unclaimed_angles"):
-            story.append(_p("Unclaimed angles", _SUB))
-            for a in prior_art["unclaimed_angles"]:
-                story.append(_p(a.get("angle", ""), _BODY))
-                if a.get("why"):
-                    story.append(_p(a["why"], _DIM))
-                ct = ", ".join(a.get("contrast_titles") or [])
-                if ct:
-                    story.append(_p(f"checked against: {ct}", _META))
-                if a.get("prompt"):
-                    story.append(_p(f"→ {a['prompt']}", _META))
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
