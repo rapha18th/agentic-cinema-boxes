@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MediaBit } from "./Media";
+import { MODALITY_GLYPH } from "./Media";
 
 interface Run {
   run: number;
@@ -37,7 +37,26 @@ function cite(e: Ev) {
   return [e.title || e.source_domain || e.url, e.publish_date].filter(Boolean).join(" · ");
 }
 
-export function Ledger({ runs, evidence }: { runs: Run[]; evidence: Ev[] }) {
+/** Strip the markdown/wiki syntax that leaks through raw scraped text so a
+ *  one-line preview reads as a sentence, not a source dump. */
+function snippet(text?: string) {
+  const clean = (text || "")
+    .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, "$1") // [[wiki links]]
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [md links](url)
+    .replace(/[#*_`>]+/g, "") // md punctuation
+    .replace(/\{\{[^}]*\}\}/g, "") // {{templates}}
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length > 90 ? `${clean.slice(0, 90)}…` : clean;
+}
+
+export function Ledger({
+  runs, evidence, onOpenEvidence,
+}: {
+  runs: Run[];
+  evidence: Ev[];
+  onOpenEvidence: (e: Ev) => void;
+}) {
   const [open, setOpen] = useState<number | null>(runs.length ? runs[runs.length - 1].run : null);
   if (!runs.length) return <p className="muted">No research run yet.</p>;
 
@@ -76,17 +95,16 @@ export function Ledger({ runs, evidence }: { runs: Run[]; evidence: Ev[] }) {
                 {!!mine.length && (
                   <details className="round-ev">
                     <summary>{mine.length} evidence items this round</summary>
-                    {mine.map((e) => (
-                      <div className="ev-row" key={e.id}>
-                        {e.modality && e.modality !== "text" && <MediaBit e={e} />}
-                        <div>
-                          {e.url
-                            ? <a href={e.url} target="_blank" rel="noopener">{cite(e)}</a>
-                            : <span>{cite(e)}</span>}
-                          <div className="muted">{(e.text || "").slice(0, 140)}</div>
-                        </div>
-                      </div>
-                    ))}
+                    <div className="round-ev-list">
+                      {mine.map((e) => (
+                        <button type="button" className="ev-row-compact" key={e.id}
+                                onClick={() => onOpenEvidence(e)}>
+                          <span className="ev-row-modality">{MODALITY_GLYPH[e.modality || "text"] || "·"}</span>
+                          <span className="ev-row-cite">{cite(e)}</span>
+                          <span className="ev-row-snip">{snippet(e.text)}</span>
+                        </button>
+                      ))}
+                    </div>
                   </details>
                 )}
                 {r.next_action && <div className="next">→ {r.next_action}</div>}

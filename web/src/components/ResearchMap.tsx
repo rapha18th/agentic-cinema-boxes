@@ -28,15 +28,16 @@ const PALETTE = [
 ];
 
 /** A dark canvas of research. Each box is a cluster; each evidence fragment a
- *  dot. Images show as thumbnails. Click a box to focus it, a dot to open its
- *  source, hover for the citation. */
+ *  dot. Images show as thumbnails. Click a box to focus it, a dot to open it
+ *  in the evidence modal, hover a dot for the citation. */
 export function ResearchMap({
-  boxes, evidence, selected, onSelect,
+  boxes, evidence, selected, onSelect, onOpenEvidence,
 }: {
   boxes: Box[];
   evidence: Ev[];
   selected: string | null;
   onSelect: (id: string | null) => void;
+  onOpenEvidence: (e: Ev) => void;
 }) {
   const W = 720;
   const H = 460;
@@ -126,12 +127,12 @@ export function ResearchMap({
           const label = `${d.e.title || d.e.modality || "evidence"}${d.director ? " · your upload" : ""}`;
           const common = {
             opacity: dim ? 0.15 : 1,
-            style: { cursor: d.e.url ? "pointer" : "default" },
+            style: { cursor: "pointer" },
             onMouseEnter: () => setHover({ x: d.x, y: d.y, label }),
             onMouseLeave: () => setHover(null),
             onClick: (ev: React.MouseEvent) => {
               ev.stopPropagation();
-              if (d.e.url) window.open(d.e.url, "_blank", "noopener");
+              onOpenEvidence(d.e);
             },
           };
           if (d.isImg) {

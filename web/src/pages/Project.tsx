@@ -5,6 +5,7 @@ import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
 import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { EvidenceModal, isInteractiveClick } from "../components/EvidenceModal";
 import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVerdicts } from "../data";
 import {
   ask, deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource,
@@ -45,6 +46,7 @@ export function Project() {
   const [surveying, setSurveying] = useState(false);
   const [priorArtLocal, setPriorArtLocal] = useState<any>(null);
   const priorArt = priorArtDoc || priorArtLocal;
+  const [modalEv, setModalEv] = useState<any | null>(null);
 
   const boxName = useMemo(
     () => Object.fromEntries(boxes.map((b: any) => [b.id, b.name])),
@@ -226,7 +228,8 @@ export function Project() {
               ))}
             </div>
           )}
-          <ResearchMap boxes={filteredBoxes as any} evidence={filteredEvidence as any} selected={selBox} onSelect={setSelBox} />
+          <ResearchMap boxes={filteredBoxes as any} evidence={filteredEvidence as any} selected={selBox}
+                       onSelect={setSelBox} onOpenEvidence={setModalEv} />
           <div className="boxwrap">
             {[...filteredBoxes].sort((a: any, b: any) => (a.score ?? 0) - (b.score ?? 0)).map((b: any) => {
               const liveCount = allEvidence.filter((e: any) => e.objective_id === b.id).length;
@@ -246,7 +249,7 @@ export function Project() {
           <h3>Activity</h3>
           <pre className="activity">{activity.join("\n") || "idle"}</pre>
           <h3>Ledger</h3>
-          <Ledger runs={runs as any} evidence={evidence as any} />
+          <Ledger runs={runs as any} evidence={evidence as any} onOpenEvidence={setModalEv} />
         </section>
       </div>
 
@@ -255,7 +258,11 @@ export function Project() {
           <h3>{boxName[selBox]} <span className="muted">· {selEvidence.length} items</span></h3>
           <div className="evgrid">
             {selEvidence.map((e: any) => (
-              <div className="evcard" key={e.id}>
+              <div className="evcard" key={e.id} role="button" tabIndex={0}
+                   onClick={(ev) => { if (!isInteractiveClick(ev)) setModalEv(e); }}
+                   onKeyDown={(ev) => {
+                     if ((ev.key === "Enter" || ev.key === " ") && !isInteractiveClick(ev)) setModalEv(e);
+                   }}>
                 {e.modality && e.modality !== "text"
                   ? <MediaBit e={e} size="full" />
                   : <div className="evtext">{(e.text || "").slice(0, 220)}</div>}
@@ -371,7 +378,11 @@ export function Project() {
           <p className="muted">No matching evidence in the index.</p>
         )}
         {answers.map((a, i) => (
-          <div className="answer" key={i}>
+          <div className="answer" key={i} role="button" tabIndex={0}
+               onClick={(ev) => { if (!isInteractiveClick(ev)) setModalEv(a); }}
+               onKeyDown={(ev) => {
+                 if ((ev.key === "Enter" || ev.key === " ") && !isInteractiveClick(ev)) setModalEv(a);
+               }}>
             {a.modality && a.modality !== "text" && <MediaBit e={a} />}
             <div>{a.text}</div>
             <div className="muted">
@@ -392,15 +403,21 @@ export function Project() {
                 {(b.sources || []).map((s: any, j: number) => {
                   if (s.modality === "image" && (s.image_url || s.media_url)) {
                     return (
-                      <a key={j} href={s.url || s.media_url || s.image_url} target="_blank" rel="noopener" title={s.cite}>
+                      <button key={j} type="button" className="src-click" title={s.cite}
+                              onClick={() => setModalEv(s)}>
                         <img className="ev-thumb" src={s.media_url || s.image_url} alt="" loading="lazy" />
-                      </a>
+                      </button>
                     );
                   }
                   if ((s.modality === "audio" || s.modality === "video" || s.modality === "pdf") && s.media_url) {
-                    return <span key={j} className="beat-media"><MediaBit e={s} /> <span className="muted">{s.cite}</span></span>;
+                    return (
+                      <span key={j} className="beat-media"
+                            onClick={(ev) => { if (!isInteractiveClick(ev)) setModalEv(s); }}>
+                        <MediaBit e={s} /> <span className="muted">{s.cite}</span>
+                      </span>
+                    );
                   }
-                  return <a key={j} className="src-link" href={s.url} target="_blank" rel="noopener">{s.cite}</a>;
+                  return <button key={j} type="button" className="src-link" onClick={() => setModalEv(s)}>{s.cite}</button>;
                 })}
               </div>
             </div>
@@ -422,6 +439,8 @@ export function Project() {
           )}
         </div>
       </section>
+
+      <EvidenceModal evidence={modalEv} boxName={boxName} onClose={() => setModalEv(null)} />
     </div>
   );
 }
