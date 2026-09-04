@@ -13,6 +13,7 @@ builds a research ledger and can stop on its own.
 from __future__ import annotations
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -151,49 +152,68 @@ def _do_round(
         confidence_before=before.confidence if before else 0.0,
     )
 
-    # Distribute the round's media budget across objectives, at most 2 of a kind
-    # per objective, and never exceed the round total.
-    budget = {"img": d.images_per_round, "doc": d.docs_per_round, "av": d.av_per_round}
     n_targets = len(targets)
-    for i, obj in enumerate(targets):
-        progress("researching", round=run_no, objective=obj.name,
-                 objective_index=i, objective_count=n_targets)
-        queries = ontology.objective_queries(obj, proj.premise, k=d.queries_per_objective)
-        on_event({"type": "search", "objective": obj.name, "queries": queries})
-        rec.searches.append({"objective": obj.name, "queries": queries})
-        take = {k: min(2, budget[k]) for k in budget}
-        found = ps.research(
-            obj.description or obj.name,
-            queries,
-            objective_id=obj.id,
-            extract_urls=d.extract_urls,
-            full_content=d.full_content,
-            round_no=run_no,
-            harvest_images=take["img"],
-            harvest_docs=take["doc"],
-            harvest_av=take["av"],
+    if n_targets:
+        # One call writes queries for every box in the round instead of one
+        # call per box. Each objective gets its own shot at up to 2 of a kind
+        # (never the round total divided by target count — with 5 objectives
+        # and a 4-image round budget that floors to zero and no box gets any
+        # pictures at all). Objectives now research concurrently, so a shared
+        # mutable pool isn't safe; a small per-objective ceiling is the
+        # trade-off, and in practice most pages don't have 2 of everything
+        # anyway, so the round rarely comes close to the worst case.
+        queries_by_id = ontology.objective_queries_batch(
+            targets, proj.premise, k=d.queries_per_objective
         )
-        by_mod = Counter(e.modality for e in found)
-        n_text = by_mod.get("text", 0)
-        n_media = len(found) - n_text
-        on_event({"type": "extract", "objective": obj.name, "sources": n_text,
-                  "images": by_mod.get("image", 0), "docs": by_mod.get("pdf", 0),
-                  "av": by_mod.get("audio", 0) + by_mod.get("video", 0)})
-        fresh = proj._add_evidence(found)
-        if fresh:
-            on_event({"type": "evidence", "objective": obj.name,
-                      "items": [e.to_dict() for e in fresh]})
-        added = len(fresh)
-        rec.sources_examined += n_text
-        rec.evidence_indexed += added
-        rec.images_indexed += by_mod.get("image", 0)
-        rec.media_indexed += n_media - by_mod.get("image", 0)
-        rec.sources_extracted += min(d.extract_urls, n_text)
-        budget["img"] -= by_mod.get("image", 0)
-        budget["doc"] -= by_mod.get("pdf", 0)
-        budget["av"] -= by_mod.get("audio", 0) + by_mod.get("video", 0)
-        if obj.emergent:
-            rec.new_boxes.append(obj.name)
+        per_obj_budget = {
+            k: min(2, total) for k, total in {
+                "img": d.images_per_round, "doc": d.docs_per_round, "av": d.av_per_round,
+            }.items()
+        }
+        for obj in targets:
+            qs = queries_by_id.get(obj.id) or [f"{obj.name.lower()} {proj.premise}"]
+            on_event({"type": "search", "objective": obj.name, "queries": qs})
+            rec.searches.append({"objective": obj.name, "queries": qs})
+
+        def _research_one(obj: Objective) -> tuple[Objective, list[Evidence]]:
+            qs = queries_by_id.get(obj.id) or [f"{obj.name.lower()} {proj.premise}"]
+            found = ps.research(
+                obj.description or obj.name, qs,
+                objective_id=obj.id, extract_urls=d.extract_urls,
+                full_content=d.full_content, round_no=run_no,
+                harvest_images=per_obj_budget["img"], harvest_docs=per_obj_budget["doc"],
+                harvest_av=per_obj_budget["av"],
+            )
+            return obj, found
+
+        # Objectives are independent research tasks; run them concurrently and
+        # stream results in completion order so the live console keeps moving
+        # instead of going quiet for the whole round then dumping everything.
+        completed = 0
+        with ThreadPoolExecutor(max_workers=min(3, n_targets)) as ex:
+            futures = [ex.submit(_research_one, obj) for obj in targets]
+            for fut in as_completed(futures):
+                obj, found = fut.result()
+                progress("researching", round=run_no, objective=obj.name,
+                         objective_index=completed, objective_count=n_targets)
+                completed += 1
+                by_mod = Counter(e.modality for e in found)
+                n_text = by_mod.get("text", 0)
+                n_media = len(found) - n_text
+                on_event({"type": "extract", "objective": obj.name, "sources": n_text,
+                          "images": by_mod.get("image", 0), "docs": by_mod.get("pdf", 0),
+                          "av": by_mod.get("audio", 0) + by_mod.get("video", 0)})
+                fresh = proj._add_evidence(found)
+                if fresh:
+                    on_event({"type": "evidence", "objective": obj.name,
+                              "items": [e.to_dict() for e in fresh]})
+                rec.sources_examined += n_text
+                rec.evidence_indexed += len(fresh)
+                rec.images_indexed += by_mod.get("image", 0)
+                rec.media_indexed += n_media - by_mod.get("image", 0)
+                rec.sources_extracted += min(d.extract_urls, n_text)
+                if obj.emergent:
+                    rec.new_boxes.append(obj.name)
 
     # --- contradictions: candidates by embedding, verdicts by Gemini --- #
     progress("verifying", round=run_no)

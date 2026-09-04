@@ -76,16 +76,32 @@ def research_plan(premise: str, n: int = 10) -> list[Objective]:
     return out[:n]
 
 
-def objective_queries(obj: Objective, premise: str, k: int = 2) -> list[str]:
-    prompt = (
-        f"Film premise: {premise}\n\n"
-        f"Research box: {obj.name} — {obj.description}\n\n"
-        f"Write {k} web search queries that would find primary and documentary "
-        f"evidence for this box. Return a JSON list of strings."
-    )
-    raw = llm.generate_json(prompt)
-    qs = raw if isinstance(raw, list) else raw.get("queries", [])
-    return [str(q).strip() for q in qs][:k] or [f"{obj.name.lower()} {premise}"]
+_QUERIES_PROMPT = """Film premise: {premise}
+
+Research boxes needing search queries:
+{catalog}
+
+For EACH box, write {k} web search queries that would find primary and
+documentary evidence for it. Return JSON: an object keyed by box id, each
+value a list of {k} query strings. Example: {{"obj01": ["query one", "query two"]}}"""
+
+
+def objective_queries_batch(
+    objs: list[Objective], premise: str, k: int = 2
+) -> dict[str, list[str]]:
+    """One call writes queries for every target box in a round, instead of one
+    call per box — the same batched-catalog pattern research_plan and the reel
+    already use."""
+    if not objs:
+        return {}
+    catalog = "\n".join(f"- {o.id}: {o.name} — {o.description}" for o in objs)
+    raw = llm.generate_json(_QUERIES_PROMPT.format(premise=premise, catalog=catalog, k=k))
+    raw = raw if isinstance(raw, dict) else {}
+    out: dict[str, list[str]] = {}
+    for o in objs:
+        qs = raw.get(o.id) or []
+        out[o.id] = [str(q).strip() for q in qs][:k] or [f"{o.name.lower()} {premise}"]
+    return out
 
 
 _EMERGENT_PROMPT = """Film premise:

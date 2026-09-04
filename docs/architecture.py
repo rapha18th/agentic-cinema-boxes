@@ -73,13 +73,14 @@ zone(3.7, 0.5, 17.0, 8.4, "Google Cloud", Z_GREY, dots=True)
 tile(5.05, 7.35, "Firebase Hosting", "static app · /api", color=YELLOW, r=0.42)
 tile(5.05, 4.2, "Cloud Run", "boxes-api", color=BLUE, r=0.5)
 
-# top strip: Parallel (partner) + Vertex AI
-cluster(6.8, 6.5, 3.8, 1.9, "Parallel  ·  partner", ec=PURPLE, tc="#5B3FCF")
-tile(7.9, 7.45, "Search API", color=PURPLE, r=0.36)
-tile(9.6, 7.45, "Extract API", color=PURPLE, r=0.36)
-cluster(11.0, 6.5, 4.6, 1.9, "Vertex AI  ·  global")
-tile(12.2, 7.45, "Gemini 3.8 Flash", color=BLUE, r=0.36)
-tile(14.35, 7.45, "Gemini Embedding 2", color=BLUE, r=0.36)
+# top strip: Parallel + TMDB (partners) + Vertex AI
+cluster(6.8, 6.5, 4.5, 1.9, "Search + prior art  ·  partners", ec=PURPLE, tc="#5B3FCF")
+tile(7.6, 7.45, "Search API", color=PURPLE, r=0.32)
+tile(8.75, 7.45, "Extract API", color=PURPLE, r=0.32)
+tile(9.9, 7.45, "TMDB", "prior art", color=PURPLE, r=0.32)
+cluster(11.7, 6.5, 4.6, 1.9, "Vertex AI  ·  global")
+tile(12.9, 7.45, "Gemini 3.8 Flash", color=BLUE, r=0.36)
+tile(15.05, 7.45, "Gemini Embedding 2", color=BLUE, r=0.36)
 
 # middle strip: the loop  (title right-aligned, clear of the upward arrows)
 cluster(6.4, 2.6, 9.8, 2.5, "")
@@ -109,21 +110,21 @@ wire([(4.58, 4.0), (4.0, 4.0), (4.0, 5.8), (2.6, 5.8)],
 wire([(5.55, 4.2), (6.35, 4.2), (6.35, ly), (cxs[0] - 0.36, ly)], lw=2.0)
 
 # loop <-> Parallel (up), both directions
-wire([(cxs[1] - 0.12, ly + 0.36), (cxs[1] - 0.12, 5.5), (7.9, 5.5), (7.9, 7.09)],
+wire([(cxs[1] - 0.12, ly + 0.36), (cxs[1] - 0.12, 5.5), (7.6, 5.5), (7.6, 7.09)],
      color=PURPLE, tcol="#5B3FCF", text="objective + queries", tp=(cxs[1] - 0.4, 5.15))
-wire([(9.6, 7.09), (9.6, 5.85), (cxs[1] + 0.35, 5.85), (cxs[1] + 0.35, ly + 0.36)], color=PURPLE)
+wire([(8.75, 7.09), (8.75, 5.85), (cxs[1] + 0.35, 5.85), (cxs[1] + 0.35, ly + 0.36)], color=PURPLE)
 
 # loop -> Vertex (one consolidated arrow, routed clear of the title)
-wire([(cxs[2], ly + 0.36), (cxs[2], 5.35), (13.2, 5.35), (13.2, 7.09)], color=BLUE,
-     text="Gemini 3.8 Flash  ·  Embedding 2", tp=(11.6, 5.62))
+wire([(cxs[2], ly + 0.36), (cxs[2], 5.35), (13.95, 5.35), (13.95, 7.09)], color=BLUE,
+     text="Gemini 3.8 Flash  ·  Embedding 2", tp=(11.9, 5.62))
 
 # Cloud Run -> Data (bottom rail; enters the Data tiles on the left, clear of labels)
 wire([(5.05, 3.7), (5.05, 1.15), (17.15, 1.15), (17.15, 3.1), (18.05, 3.1)],
      color=GREEN, tcol="#1E7B34", text="persist live: evidence · progress · files", tp=(10.6, 0.93))
 wire([(17.7, 3.5), (17.15, 3.5), (17.15, 6.5), (18.05, 6.5)], color=GREEN, lw=2.0)
 
-ax.text(0.3, 0.14, "Vertex AI serves Gemini on the  global  location.        Parallel Search + Extract is imported and "
-        "invoked in runtime code on every research round.", fontsize=8, color=SUB)
+ax.text(0.3, 0.14, "Vertex AI serves Gemini on the  global  location.        Parallel Search + Extract runs on every "
+        "research round.        TMDB seeds the prior-art survey.", fontsize=8, color=SUB)
 
 plt.savefig("architecture.png", dpi=135, bbox_inches="tight", facecolor="white", pad_inches=0.28)
 print("ok")

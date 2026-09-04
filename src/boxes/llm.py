@@ -12,7 +12,7 @@ from typing import Any
 from google.genai import types
 
 from . import config
-from .embeddings import client
+from .embeddings import client, with_retry
 
 # Planning, evaluation, and verification are structured, mechanical steps. Turn
 # extended thinking off so each call is a few seconds, not twenty.
@@ -24,18 +24,18 @@ _TEXT_CFG = types.GenerateContentConfig(temperature=0.3, thinking_config=_NO_THI
 
 
 def generate(prompt: str, *, model: str | None = None) -> str:
-    r = client().models.generate_content(
+    r = with_retry(lambda: client().models.generate_content(
         model=model or config.CHAT_MODEL, contents=prompt, config=_TEXT_CFG
-    )
+    ))
     return (r.text or "").strip()
 
 
 def generate_json(prompt: str, *, model: str | None = None) -> Any:
     """Ask for JSON and parse it. Falls back to a lenient extraction if the model
     wraps the payload in prose or a code fence."""
-    r = client().models.generate_content(
+    r = with_retry(lambda: client().models.generate_content(
         model=model or config.CHAT_MODEL, contents=prompt, config=_JSON_CFG
-    )
+    ))
     txt = (r.text or "").strip()
     try:
         return json.loads(txt)
