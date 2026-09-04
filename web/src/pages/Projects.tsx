@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { listProjects, createProject } from "../api";
 import { useAuth } from "../auth";
 import { Landing } from "./Landing";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 export function Projects() {
   const { user, signIn, logout } = useAuth();
@@ -31,7 +32,10 @@ export function Projects() {
     <div className="wrap">
       <header>
         <h1>THE BOXES</h1>
-        <button className="ghost" onClick={logout}>Sign out</button>
+        <div className="head-actions">
+          <ThemeToggle />
+          <button className="ghost" onClick={logout}>Sign out</button>
+        </div>
       </header>
 
       <section className="card">
@@ -44,9 +48,9 @@ export function Projects() {
         />
         <div className="row">
           <select value={depth} onChange={(e) => setDepth(e.target.value)}>
-            <option value="scout">Scout — minutes</option>
-            <option value="production">Production — deeper</option>
-            <option value="kubrick">Kubrick — obsessive</option>
+            <option value="scout">Scout · minutes</option>
+            <option value="production">Production · deeper</option>
+            <option value="kubrick">Kubrick · obsessive</option>
           </select>
           <button onClick={start} disabled={busy}>{busy ? "Creating…" : "Build the world"}</button>
         </div>
