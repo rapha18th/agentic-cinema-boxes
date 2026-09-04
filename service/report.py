@@ -361,7 +361,9 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
     # ---- departments: the same research, sliced by who needs it ------------
     story.append(PageBreak())
     story.append(_p("DEPARTMENTS", _H))
-    story.append(_p("The same boxes, grouped by which crew briefs off them.", _INTRO))
+    story.append(_p(
+        "The same boxes, grouped by which crew briefs off them, with what each "
+        "one actually contains.", _INTRO))
     story.append(_rule())
     box_by_dept: dict[str, list[dict]] = {}
     for b in boxes:
@@ -374,9 +376,12 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
         if not dboxes:
             continue
         story.append(_p(_DEPT_LABEL.get(d, d.title()), _SUB))
-        story.append(_p(
-            ", ".join(f"{b.get('name')} ({b.get('evidence_count', 0)})" for b in dboxes),
-            _BODY))
+        for b in dboxes:
+            story.append(_p(
+                f"{b.get('name')}  ·  {b.get('evidence_count', 0)} items", _DIM))
+            summary = narrative.box_summaries.get(b.get("id")) or b.get("description", "")
+            if summary:
+                story.append(_p(summary, _BODY))
         if d in _VISUAL_DEPTS:
             ids = {b.get("id") for b in dboxes}
             imgs = [e for e in evidence if e.get("objective_id") in ids
@@ -384,6 +389,7 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
             row = _image_row(imgs)
             if row:
                 story.append(row)
+        story.append(Spacer(1, 8))
 
     # ---- prior art -----------------------------------------------------------
     if prior_art and prior_art.get("neighbors"):
