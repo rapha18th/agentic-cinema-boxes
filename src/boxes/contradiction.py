@@ -11,6 +11,7 @@ two citations.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
 
 import numpy as np
@@ -100,12 +101,14 @@ def find_contradictions(
     vectors: np.ndarray,
     *,
     max_checks: int = 24,
+    max_workers: int = 4,
 ) -> list[Verdict]:
     """Run both stages. Returns only the verified contradicts / contextualises
-    verdicts, most similar first."""
-    verdicts: list[Verdict] = []
-    for i, j, sim in candidate_pairs(vectors, max_pairs=max_checks):
-        v = verify(evidence[i], evidence[j], sim)
-        if v.relation in ("contradicts", "contextualises"):
-            verdicts.append(v)
-    return verdicts
+    verdicts, most similar first. Each pair's Gemini verdict is independent of
+    every other, so they verify concurrently rather than one at a time."""
+    pairs = candidate_pairs(vectors, max_pairs=max_checks)
+    if not pairs:
+        return []
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(pairs))) as ex:
+        results = list(ex.map(lambda p: verify(evidence[p[0]], evidence[p[1]], p[2]), pairs))
+    return [v for v in results if v.relation in ("contradicts", "contextualises")]
