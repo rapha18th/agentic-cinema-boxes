@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listProjects, createProject } from "../api";
 import { useAuth } from "../auth";
+import { Landing } from "./Landing";
 
 export function Projects() {
   const { user, signIn, logout } = useAuth();
@@ -13,15 +14,7 @@ export function Projects() {
 
   useEffect(() => { if (user) listProjects().then(setRows).catch(() => {}); }, [user]);
 
-  if (!user) {
-    return (
-      <div className="center">
-        <h1>THE BOXES</h1>
-        <p className="muted">An autonomous research department for filmmakers.</p>
-        <button onClick={signIn}>Sign in with Google</button>
-      </div>
-    );
-  }
+  if (!user) return <Landing onSignIn={signIn} />;
 
   const start = async () => {
     if (!premise.trim()) return;
