@@ -22,6 +22,39 @@ export async function createProject(premise: string, depth: string) {
   return r.json();
 }
 
+export async function updateProject(pid: string, patch: { premise?: string; depth?: string }) {
+  const r = await fetch(`${BASE}/api/projects/${pid}`, {
+    method: "PATCH", headers: await headers(), body: JSON.stringify(patch),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function deleteProject(pid: string) {
+  const r = await fetch(`${BASE}/api/projects/${pid}`, {
+    method: "DELETE", headers: await headers(),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+/** Fetch the PDF dossier with auth, then hand it to the browser to save. */
+export async function downloadReport(pid: string) {
+  const r = await fetch(`${BASE}/api/projects/${pid}/report.pdf`, { headers: await headers() });
+  if (!r.ok) throw new Error(await r.text());
+  const blob = await r.blob();
+  const cd = r.headers.get("Content-Disposition") || "";
+  const name = /filename="?([^"]+)"?/.exec(cd)?.[1] || `the-boxes-${pid}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 export async function ask(pid: string, question: string) {
   const r = await fetch(`${BASE}/api/projects/${pid}/ask`, {
     method: "POST", headers: await headers(), body: JSON.stringify({ question }),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listProjects, createProject } from "../api";
+import { listProjects, createProject, deleteProject } from "../api";
 import { useAuth } from "../auth";
 import { Landing } from "./Landing";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -12,8 +12,15 @@ export function Projects() {
   const [premise, setPremise] = useState("");
   const [depth, setDepth] = useState("scout");
   const [busy, setBusy] = useState(false);
+  const [delId, setDelId] = useState<string | null>(null);
 
   useEffect(() => { if (user) listProjects().then(setRows).catch(() => {}); }, [user]);
+
+  const remove = async (id: string) => {
+    setRows((rs) => rs.filter((r) => r.id !== id));
+    setDelId(null);
+    try { await deleteProject(id); } catch { listProjects().then(setRows).catch(() => {}); }
+  };
 
   if (!user) return <Landing onSignIn={signIn} />;
 
@@ -59,10 +66,21 @@ export function Projects() {
       <section>
         <h2>Projects</h2>
         {rows.map((r) => (
-          <Link className="proj" key={r.id} to={`/p/${r.id}`}>
-            <span>{r.premise}</span>
-            <span className="muted">{r.status} · {Math.round((r.confidence ?? 0) * 100)}%</span>
-          </Link>
+          <div className="proj" key={r.id}>
+            <Link className="proj-main" to={`/p/${r.id}`}>
+              <span>{r.premise}</span>
+              <span className="muted">{r.status} · {Math.round((r.confidence ?? 0) * 100)}%</span>
+            </Link>
+            {delId === r.id ? (
+              <span className="proj-del">
+                <button className="danger-btn" onClick={() => remove(r.id)}>Delete</button>
+                <button className="linkish muted" onClick={() => setDelId(null)}>cancel</button>
+              </span>
+            ) : (
+              <button className="proj-del linkish muted" title="Delete project"
+                      onClick={() => setDelId(r.id)}>✕</button>
+            )}
+          </div>
         ))}
         {!rows.length && <p className="muted">None yet.</p>}
       </section>

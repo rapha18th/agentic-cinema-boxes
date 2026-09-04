@@ -60,9 +60,44 @@ def set_project_status(uid: str, pid: str, **fields: Any) -> None:
     _proj_ref(uid, pid).set(fields, merge=True)
 
 
+def update_project(uid: str, pid: str, **fields: Any) -> None:
+    """Edit user-owned fields (premise, depth). Same shape as set_project_status
+    but named for intent."""
+    fields["updated_at"] = time.time()
+    _proj_ref(uid, pid).set(fields, merge=True)
+
+
 def get_project(uid: str, pid: str) -> dict | None:
     snap = _proj_ref(uid, pid).get()
     return snap.to_dict() if snap.exists else None
+
+
+def _delete_collection(col, batch_size: int = 300) -> None:
+    while True:
+        docs = list(col.limit(batch_size).stream())
+        if not docs:
+            return
+        batch = db().batch()
+        for d in docs:
+            batch.delete(d.reference)
+        batch.commit()
+
+
+def delete_project(uid: str, pid: str) -> None:
+    """Remove the project doc, every subcollection under it, and its files."""
+    ref = _proj_ref(uid, pid)
+    client = db()
+    try:
+        client.recursive_delete(ref)  # google-cloud-firestore >= 2.5
+    except AttributeError:
+        for sub in ("boxes", "evidence", "runs", "verdicts", "meta"):
+            _delete_collection(ref.collection(sub))
+    ref.delete()  # idempotent belt-and-braces
+    try:
+        for blob in bucket().list_blobs(prefix=f"users/{uid}/projects/{pid}/"):
+            blob.delete()
+    except Exception:  # noqa: BLE001, S110
+        pass
 
 
 def list_projects(uid: str) -> list[dict]:
@@ -112,6 +147,38 @@ def add_evidence_batch(uid: str, pid: str, items: list[tuple[dict, list[float] |
 
 def list_evidence(uid: str, pid: str) -> list[dict]:
     return [d.to_dict() for d in _proj_ref(uid, pid).collection("evidence").stream()]
+
+
+_REPORT_EV_FIELDS = [
+    "text", "url", "title", "source_domain", "publish_date", "modality",
+    "objective_id", "license_note", "source", "image_url", "media_url", "round",
+]
+
+
+def list_evidence_report(uid: str, pid: str) -> list[dict]:
+    """Evidence without the 768-float vectors — for the PDF report."""
+    col = _proj_ref(uid, pid).collection("evidence")
+    return [d.to_dict() for d in col.select(_REPORT_EV_FIELDS).stream()]
+
+
+def list_boxes(uid: str, pid: str) -> list[dict]:
+    return [d.to_dict() for d in _proj_ref(uid, pid).collection("boxes").stream()]
+
+
+def list_runs(uid: str, pid: str) -> list[dict]:
+    return [
+        d.to_dict()
+        for d in _proj_ref(uid, pid).collection("runs").order_by("run").stream()
+    ]
+
+
+def list_verdicts(uid: str, pid: str) -> list[dict]:
+    return [d.to_dict() for d in _proj_ref(uid, pid).collection("verdicts").stream()]
+
+
+def get_reel(uid: str, pid: str) -> list[dict]:
+    snap = _proj_ref(uid, pid).collection("meta").document("reel").get()
+    return (snap.to_dict() or {}).get("beats", []) if snap.exists else []
 
 
 def add_run(uid: str, pid: str, record: dict) -> None:

@@ -189,11 +189,24 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .theme-toggle.bare button.on { background: none; color: var(--landing-ink); }
 
 /* ── project list ──────────────────────────────────────────────────── */
-.proj { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: 3px; margin: 8px 0; text-decoration: none;
+.proj { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 3px; margin: 8px 0;
   color: var(--text); transition: border-color .15s ease, background .15s ease; }
 .proj:hover { border-color: var(--line-strong); background: var(--surface); }
+.proj-main { flex: 1; display: flex; justify-content: space-between; gap: 12px;
+  text-decoration: none; color: inherit; min-width: 0; }
+.proj-main > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .muted { font: 12px var(--mono); letter-spacing: .04em; white-space: nowrap; }
+.proj-del { flex: none; display: inline-flex; gap: 8px; align-items: center;
+  font-size: 12px; padding: 2px 4px; }
+.proj-del.linkish:hover { color: var(--danger); }
+
+/* action row + danger zone */
+.action-row { flex-wrap: wrap; }
+.card.danger { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.card.danger .row { justify-content: space-between; flex-wrap: wrap; }
+.danger-btn { background: var(--danger); color: #fff; }
+.muted.err { color: var(--danger); }
 
 /* ── project page ──────────────────────────────────────────────────── */
 .premise { max-width: 62ch; margin: 20px 0 16px; font: 300 21px/1.5 var(--sans);

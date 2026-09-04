@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -30,7 +30,10 @@ from boxes.embeddings import embed_texts, embed_parts, image_part, TASK_SEARCH  
 from boxes.evidence import Evidence  # noqa: E402
 
 import auth  # noqa: E402
+import report  # noqa: E402
 import store  # noqa: E402
+
+_DEPTHS = {"scout", "production", "kubrick"}
 
 PROJECT_ID = os.environ["GOOGLE_CLOUD_PROJECT"]  # required
 BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", f"{PROJECT_ID}.firebasestorage.app")
@@ -74,6 +77,57 @@ def get_project(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
         raise HTTPException(404, "not found")
     p["id"] = pid
     return p
+
+
+@app.patch("/api/projects/{pid}")
+def update_project(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
+    if not store.get_project(uid, pid):
+        raise HTTPException(404, "not found")
+    patch: dict = {}
+    if "premise" in body:
+        premise = (body.get("premise") or "").strip()
+        if not premise:
+            raise HTTPException(400, "premise cannot be empty")
+        patch["premise"] = premise
+    if "depth" in body:
+        depth = body.get("depth")
+        if depth not in _DEPTHS:
+            raise HTTPException(400, "depth must be scout, production or kubrick")
+        patch["depth"] = depth
+    if not patch:
+        raise HTTPException(400, "nothing to update")
+    store.update_project(uid, pid, **patch)
+    return {"id": pid, **patch}
+
+
+@app.delete("/api/projects/{pid}")
+def delete_project(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
+    if not store.get_project(uid, pid):
+        raise HTTPException(404, "not found")
+    store.delete_project(uid, pid)
+    return {"deleted": pid}
+
+
+@app.get("/api/projects/{pid}/report.pdf")
+def project_report(pid: str, uid: str = Depends(auth.current_uid)) -> Response:
+    p = store.get_project(uid, pid)
+    if not p:
+        raise HTTPException(404, "not found")
+    p["id"] = pid
+    pdf = report.build_report_pdf(
+        project=p,
+        boxes=store.list_boxes(uid, pid),
+        evidence=store.list_evidence_report(uid, pid),
+        verdicts=store.list_verdicts(uid, pid),
+        runs=store.list_runs(uid, pid),
+        reel=store.get_reel(uid, pid),
+    )
+    stub = "".join(c if c.isalnum() else "-" for c in (p.get("premise") or "boxes"))[:40].strip("-")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="the-boxes-{stub or pid}.pdf"'},
+    )
 
 
 # --------------------------------------------------------------------------- #
