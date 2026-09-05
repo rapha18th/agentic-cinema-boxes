@@ -66,6 +66,10 @@ whole thing as a conversational tool surface (`plan_research`, `run_research`,
 The loop ends on its own when completeness reaches the depth's target, or every
 objective is well covered, or the round budget runs out.
 
+A run holds a Firestore lease keyed to its own id, so two clicks or two tabs
+cannot start competing writers, and a dropped SSE stream reattaches to the run
+already in progress. The stale-after window releases a lease whose worker died.
+
 ## Prior art
 
 On request, THE BOXES surveys existing films for a similar premise. TMDB
@@ -95,25 +99,32 @@ Every asset keeps its full source URL and a conservative rights note (`open-acce
 host · verify item rights` for known archives; `rights not verified` otherwise).
 Trimmed clips link back to the full recording at its source.
 
+Text, images, and PDFs harvest reliably. Audio and video depend on the source
+page exposing a directly fetchable file: many of the hosts that carry open
+recordings put them behind a player or block a server-side fetch. Harvest fetches
+now use a browser user agent and accept archive downloads served as
+`octet-stream`, which widens the set of pages that yield a clip. A headless fetch
+or an archive.org API path would close the rest of the gap.
+
 ## The app
 
-| Surface | What it does |
-|---|---|
-| **Research map** | Dark canvas, a dot per fragment coloured by box; images are thumbnails, other media are glyphs. Click a box to focus it; click any dot to open it in a detail modal, full text and media included; filter the whole map by production department. Emergent boxes pulse. |
-| **Cinematic console** | A 2001-style mission-control panel while a run is active: phase headline (`ACQUIRING`, `CROSS-EXAMINING SOURCES`), block-character progress bars for objective / coverage / readiness, a fragment counter, a teletype log, a scanline. |
-| **Expandable ledger** | One row per research pass, expandable to that pass's search queries and a compact, deduplicated list of the evidence it added. Click any item for the same detail modal as the map. |
-| **Contradictions** | Verified verdicts with the explanation and both citations. |
-| **Departments** | Every box tagged with the crews it briefs (script, casting, costume, art direction, sound, cinematography, locations); filter the map or the PDF report down to one department's evidence. |
-| **Prior art** | Survey on demand; a poster grid of the closest existing films and the angles none of them take, each grounded in named titles. |
-| **Add your own reference** | Upload a text, PDF, or image to any box. It is embedded into the same space as the agent's findings. |
-| **Ask the boxes** | Retrieves the strongest evidence, synthesizes an answer using only those fragments, cites factual sentences, and abstains when the archive is thin. |
-| **Reference reel** | Timed beats, each with clickable sources and inline audio or video players. |
-| **PDF dossier** | One click builds a self-contained report: a synthesized picture of the world up top, then every box as a plain-language summary plus its deduplicated sources, contradictions, the reel, department packets, and the prior-art survey. Readable with no other context. |
-| **Judge dossier** | A zero-auth, rights-safe walkthrough at `/demo`, structured around production decisions instead of telemetry. |
-| **Theme** | Light, dark, or system, everywhere including the landing page. |
+The project page opens on the outcome. A metric row (readiness, evidence,
+primary records, open risks) sits above five tabs. `Project.tsx` (live) and
+`Demo.tsx` (a frozen run) render the same tab set from `web/src/workspace/tabs.tsx`.
 
-Evidence and progress are persisted to Firestore as they stream, so the map and
-box counts fill in live during a run.
+| Tab | What it holds |
+|---|---|
+| **Overview** | The synthesized picture of the world, the strongest evidence, the thinnest boxes, a reference-sequence outline, and a grounded Ask box that answers from the index and abstains when the archive is thin. |
+| **Departments** | One expandable packet per crew (script, casting, costume, art direction, sound, cinematography, locations). Each opens to its boxes, their plain-language summaries, and their evidence, with images, PDFs, audio and video rendered in place. |
+| **Evidence** | The research map plus an All / department filter. A dot per fragment, positioned relative to its own box; images are thumbnails, other media are glyphs. Click a box to focus it, a dot to open it in a detail modal. Contradicted fragments carry a ring on the map, a tag on the card, and a panel in the modal. Zoom, pan, full screen. "Add your own reference" sits at the top: upload a text, PDF, or image and it embeds alongside the agent's findings. |
+| **Trace** | The cinematic console while a run is active (phase headline, block-character bars, teletype log), then a decision timeline (planned, per round, opened a box, cross-examined, stopped), the expandable per-pass ledger with its queries, and the verified contradiction verdicts. |
+| **Prior art** | Survey on demand. A poster grid of the closest existing films with each one's description and similarity, then the angles none of them take, each naming the titles it was checked against. |
+
+`/demo` is a genuine production run frozen to a static file: no account, no
+Firebase on the page, the same five tabs, and a downloadable PDF dossier.
+Theme (light, dark, system) applies everywhere, including the landing page.
+Evidence and progress persist to Firestore as they stream, so a live run's
+map and counts fill in as it works.
 
 ## Research depth
 
@@ -162,14 +173,20 @@ src/boxes/
   depth.py            scout / production / kubrick presets
   ledger.py           the per-round research ledger
   reel.py             the reference reel
-  workflow.py         custom ADK BaseAgent used by the production API
+  qa.py               grounded answer over retrieved fragments, with abstention
+  workflow.py         custom ADK BaseAgent, the production API's entry point
   research_loop.py    the autonomous loop; objectives research concurrently each round
-  agent.py            the ADK agent and its tools
+  agent.py            the conversational ADK tool surface over the same loop
   vectorstore.py      brute-force nearest neighbor
 service/              FastAPI backend for Cloud Run (auth, SSE, Firestore/Storage, report.py the PDF dossier)
-web/                  Vite + React app (map, console, ledger, reel, evidence modal, theme)
+web/src/workspace/    the shared tab set both Project.tsx and Demo.tsx render
+web/                  Vite + React app (results-first dossier, map, console, ledger, reel, theme)
 docs/architecture.py  the diagram source
-scripts/              access probes and the full research run
+scripts/
+  probe_access.py     confirm model access
+  research_run.py     one research run, printed to the console
+  snapshot_demo.py    run end to end and freeze web/public/demo-snapshot.json
+  clean_snapshot.py   drop polluting sources, build the demo PDF, flag style slips
 ```
 
 ## Run it locally
