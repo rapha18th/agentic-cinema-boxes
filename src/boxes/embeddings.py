@@ -1,8 +1,8 @@
 """Gemini Embedding 2 helpers.
 
 One natively multimodal model. Text, images, audio, and PDFs map into one
-3,072-dimension space, so a frame, a line, and a needle-drop are comparable
-with one cosine distance.
+normalized 768-dimensional index, so a frame, a line, and a needle-drop are
+comparable with one cosine distance.
 
 Gemini Embedding 2 has no task_type parameter. State the job as a text
 instruction prefixed to the content. Asymmetric jobs (a short query over

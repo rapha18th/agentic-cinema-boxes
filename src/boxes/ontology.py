@@ -118,7 +118,7 @@ It must be specific, recurring, and cross-cutting (it should touch several
 existing boxes). If yes, return JSON:
 {{"found": true, "name": "NEW BOX NAME", "description": "one sentence",
   "rationale": "one sentence on why it cuts across the others",
-  "departments": "1-3 values from {depts}"}}
+  "departments": ["1-3 values chosen from {depts}"]}}
 If nothing qualifies, return {{"found": false}}."""
 
 

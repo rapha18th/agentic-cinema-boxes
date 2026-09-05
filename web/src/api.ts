@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import type { AskResponse, DepthName, ProjectRecord } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -11,10 +12,10 @@ async function headers(): Promise<Record<string, string>> {
 export async function listProjects() {
   const r = await fetch(`${BASE}/api/projects`, { headers: await headers() });
   if (!r.ok) throw new Error(await r.text());
-  return (await r.json()).projects as any[];
+  return (await r.json()).projects as ProjectRecord[];
 }
 
-export async function createProject(premise: string, depth: string) {
+export async function createProject(premise: string, depth: DepthName) {
   const r = await fetch(`${BASE}/api/projects`, {
     method: "POST", headers: await headers(), body: JSON.stringify({ premise, depth }),
   });
@@ -22,7 +23,7 @@ export async function createProject(premise: string, depth: string) {
   return r.json();
 }
 
-export async function updateProject(pid: string, patch: { premise?: string; depth?: string }) {
+export async function updateProject(pid: string, patch: { premise?: string; depth?: DepthName }) {
   const r = await fetch(`${BASE}/api/projects/${pid}`, {
     method: "PATCH", headers: await headers(), body: JSON.stringify(patch),
   });
@@ -68,7 +69,7 @@ export async function ask(pid: string, question: string) {
     method: "POST", headers: await headers(), body: JSON.stringify({ question }),
   });
   if (!r.ok) throw new Error(await r.text());
-  return (await r.json()).matches as any[];
+  return (await r.json()) as AskResponse;
 }
 
 export async function uploadResource(pid: string, file: File, objectiveId: string, note: string) {

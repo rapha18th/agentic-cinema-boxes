@@ -67,6 +67,55 @@ def update_project(uid: str, pid: str, **fields: Any) -> None:
     _proj_ref(uid, pid).set(fields, merge=True)
 
 
+def try_start_run(uid: str, pid: str, run_id: str, stale_after: float = 7200) -> bool:
+    """Acquire a cross-instance Firestore lease for a research run."""
+    ref = _proj_ref(uid, pid)
+    transaction = db().transaction()
+
+    @firestore.transactional
+    def claim(txn) -> bool:
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return False
+        data = snap.to_dict() or {}
+        active = data.get("active_run_id")
+        touched = float(data.get("run_updated_at") or 0)
+        if active and time.time() - touched < stale_after:
+            return False
+        txn.set(ref, {
+            "active_run_id": run_id, "run_updated_at": time.time(),
+            "status": "researching", "error": firestore.DELETE_FIELD,
+            "updated_at": time.time(),
+        }, merge=True)
+        return True
+
+    return claim(transaction)
+
+
+def touch_run(uid: str, pid: str, run_id: str) -> None:
+    ref = _proj_ref(uid, pid)
+    snap = ref.get()
+    if snap.exists and (snap.to_dict() or {}).get("active_run_id") == run_id:
+        ref.set({"run_updated_at": time.time(), "updated_at": time.time()}, merge=True)
+
+
+def finish_run(uid: str, pid: str, run_id: str) -> None:
+    ref = _proj_ref(uid, pid)
+    transaction = db().transaction()
+
+    @firestore.transactional
+    def release(txn) -> None:
+        snap = ref.get(transaction=txn)
+        if snap.exists and (snap.to_dict() or {}).get("active_run_id") == run_id:
+            txn.set(ref, {
+                "active_run_id": firestore.DELETE_FIELD,
+                "run_updated_at": firestore.DELETE_FIELD,
+                "updated_at": time.time(),
+            }, merge=True)
+
+    release(transaction)
+
+
 def get_project(uid: str, pid: str) -> dict | None:
     snap = _proj_ref(uid, pid).get()
     return snap.to_dict() if snap.exists else None
@@ -90,7 +139,7 @@ def delete_project(uid: str, pid: str) -> None:
     try:
         client.recursive_delete(ref)  # google-cloud-firestore >= 2.5
     except AttributeError:
-        for sub in ("boxes", "evidence", "runs", "verdicts", "meta"):
+        for sub in ("boxes", "evidence", "vectors", "runs", "verdicts", "meta"):
             _delete_collection(ref.collection(sub))
     ref.delete()  # idempotent belt-and-braces
     try:
@@ -130,28 +179,43 @@ def upsert_boxes(uid: str, pid: str, boxes: Iterable[dict]) -> None:
 def add_evidence(uid: str, pid: str, ev: dict, vector: list[float] | None = None) -> None:
     doc = dict(ev)
     if vector is not None:
-        doc["vector768"] = vector
+        doc["vector768"] = firestore.DELETE_FIELD
     _proj_ref(uid, pid).collection("evidence").document(ev["id"]).set(doc, merge=True)
+    if vector is not None:
+        _proj_ref(uid, pid).collection("vectors").document(ev["id"]).set({"vector768": vector})
 
 
 def add_evidence_batch(uid: str, pid: str, items: list[tuple[dict, list[float] | None]]) -> None:
     batch = db().batch()
     col = _proj_ref(uid, pid).collection("evidence")
+    vec_col = _proj_ref(uid, pid).collection("vectors")
     for ev, vec in items:
         doc = dict(ev)
         if vec is not None:
-            doc["vector768"] = vec
+            doc["vector768"] = firestore.DELETE_FIELD
         batch.set(col.document(ev["id"]), doc, merge=True)
+        if vec is not None:
+            batch.set(vec_col.document(ev["id"]), {"vector768": vec})
     batch.commit()
 
 
 def list_evidence(uid: str, pid: str) -> list[dict]:
-    return [d.to_dict() for d in _proj_ref(uid, pid).collection("evidence").stream()]
+    ref = _proj_ref(uid, pid)
+    vectors = {d.id: (d.to_dict() or {}).get("vector768") for d in ref.collection("vectors").stream()}
+    rows = []
+    for d in ref.collection("evidence").stream():
+        row = d.to_dict() or {}
+        row["id"] = row.get("id") or d.id
+        if d.id in vectors:
+            row["vector768"] = vectors[d.id]
+        rows.append(row)
+    return rows
 
 
 _REPORT_EV_FIELDS = [
     "text", "url", "title", "source_domain", "publish_date", "modality",
-    "objective_id", "license_note", "source", "image_url", "media_url", "round",
+    "objective_id", "license_note", "source", "source_tier", "quality_score",
+    "image_url", "media_url", "round", "map_x", "map_y",
 ]
 
 

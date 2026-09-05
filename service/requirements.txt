@@ -2,6 +2,7 @@ fastapi>=0.141.0
 uvicorn[standard]>=0.52.0
 python-multipart>=0.0.20
 firebase-admin>=7.0.0
+google-adk==2.8.0
 google-genai>=2.20.0
 google-cloud-aiplatform>=1.165.0
 google-cloud-secret-manager>=2.30.0
@@ -10,3 +11,4 @@ numpy>=2.0.0
 python-dotenv>=1.0.0
 reportlab>=4.2.0
 Pillow>=10.0.0
+pypdf>=5.0.0

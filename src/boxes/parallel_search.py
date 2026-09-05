@@ -279,7 +279,7 @@ def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] |
 
 
 def _rights(host: str) -> str:
-    return "likely reusable" if any(d in host for d in _OPEN_MEDIA) else "check rights"
+    return "open-access host · verify item rights" if any(d in host for d in _OPEN_MEDIA) else "rights not verified"
 
 
 def _page_assets(page: dict, *, images: int, docs: int, av: int) -> list[dict]:

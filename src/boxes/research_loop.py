@@ -1,10 +1,10 @@
 """The autonomous research loop.
 
 plan -> for each objective: Parallel search + extract -> embed evidence ->
-measure coverage per objective and overall research confidence -> find
+measure coverage per objective and overall research completeness -> find
 contradictions (embedding candidates, Gemini verdicts) -> hypothesise the next
 gap, including emergent boxes the evidence keeps pointing at -> repeat until
-confidence hits the target or the objectives are all covered.
+research completeness hits the target or the objectives are all covered.
 
 Every step emits an event so a UI can show the agent working. The loop also
 builds a research ledger and can stop on its own.
@@ -226,11 +226,11 @@ def _do_round(
                 rec.conflicts.append(f"{v.a_cite}  vs  {v.b_cite}")
                 on_event({"type": "contradiction", "verdict": v.to_dict()})
 
-    # Only genuine contradictions count against confidence. "contextualises"
+    # Only genuine contradictions count against research completeness. "contextualises"
     # verdicts are reconciled differences and do not.
     open_conflicts = sum(1 for v in proj.contradictions if v.relation == "contradicts")
 
-    # --- coverage + confidence ---------------------------------------- #
+    # --- coverage + research completeness ----------------------------- #
     progress("scoring", round=run_no)
     rep = coverage.build_report(
         proj.objectives, proj.evidence, proj.vectors,

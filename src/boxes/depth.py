@@ -19,7 +19,7 @@ class Depth:
     docs_per_round: int      # PDFs to harvest and embed per round
     av_per_round: int        # audio + video clips to harvest and embed per round
     max_rounds: int          # autonomous follow-up rounds
-    confidence_target: float # stop when research confidence reaches this
+    confidence_target: float # stop when research completeness reaches this
     emergent_gaps_per_round: int
 
 

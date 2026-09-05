@@ -18,6 +18,8 @@ interface Ev {
   media_url?: string;
   url?: string;
   title?: string;
+  map_x?: number;
+  map_y?: number;
 }
 
 // A filmic set: distinguishable per box, but harmonised and slightly
@@ -72,16 +74,16 @@ export function ResearchMap({
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
       centers[b.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), color: PALETTE[i % PALETTE.length] };
     });
-    const dots: Dot[] = evidence.map((e, i) => {
+    const dots: Dot[] = evidence.map((e) => {
       const c = centers[e.objective_id ?? ""] ?? { x: cx, y: cy, color: "#666" };
-      const seed = (i * 2654435761) % 997;
+      const seed = [...e.id].reduce((acc, ch) => ((acc * 31) + ch.charCodeAt(0)) >>> 0, 2166136261) % 997;
       const rad = 14 + (seed % 42);
       const ang = (seed * 0.618) % (Math.PI * 2);
       const thumb = e.image_url || (e.modality === "image" ? e.media_url : "") || "";
       return {
         e,
-        x: c.x + rad * Math.cos(ang),
-        y: c.y + rad * Math.sin(ang),
+        x: e.map_x != null ? e.map_x * W : c.x + rad * Math.cos(ang),
+        y: e.map_y != null ? e.map_y * H : c.y + rad * Math.sin(ang),
         color: e.source === "director" ? "#ffffff" : c.color,
         isImg: e.modality === "image" && !!thumb,
         thumb,
@@ -89,6 +91,19 @@ export function ResearchMap({
           ? MODALITY_GLYPH[e.modality] : "",
         director: e.source === "director",
       };
+    });
+    // Once the backend has projected the embedding matrix, anchor each box at
+    // the centroid of its evidence. During a live run the stable hash fallback
+    // keeps new fragments from reshuffling their neighbours.
+    boxes.forEach((b) => {
+      const semantic = dots.filter((d) => d.e.objective_id === b.id && d.e.map_x != null);
+      if (semantic.length) {
+        centers[b.id] = {
+          x: semantic.reduce((sum, d) => sum + d.x, 0) / semantic.length,
+          y: semantic.reduce((sum, d) => sum + d.y, 0) / semantic.length,
+          color: centers[b.id].color,
+        };
+      }
     });
     return { centers, dots };
   }, [boxes, evidence]);
@@ -243,6 +258,10 @@ function MapCanvas({
           const dim = selected && selected !== b.id;
           return (
             <g key={b.id} opacity={dim ? 0.25 : 1} style={{ cursor: "pointer" }}
+               role="button" tabIndex={0} aria-label={`${b.name} research box`}
+               onKeyDown={(ev) => {
+                 if (ev.key === "Enter" || ev.key === " ") onSelect(selected === b.id ? null : b.id);
+               }}
                onClick={(ev) => {
                  ev.stopPropagation();
                  if (!suppressClick.current) onSelect(selected === b.id ? null : b.id);
@@ -270,11 +289,17 @@ function MapCanvas({
           const common = {
             opacity: dim ? 0.15 : 1,
             style: { cursor: "pointer" },
+            role: "button",
+            tabIndex: 0,
+            "aria-label": label,
             onMouseEnter: () => setHover({ x: d.x, y: d.y, label }),
             onMouseLeave: () => setHover(null),
             onClick: (ev: React.MouseEvent) => {
               ev.stopPropagation();
               if (!suppressClick.current) onOpenEvidence(d.e);
+            },
+            onKeyDown: (ev: React.KeyboardEvent) => {
+              if (ev.key === "Enter" || ev.key === " ") onOpenEvidence(d.e);
             },
           };
           if (d.isImg) {

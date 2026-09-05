@@ -4,13 +4,16 @@ import { listProjects, createProject, deleteProject } from "../api";
 import { useAuth } from "../auth";
 import { Landing } from "./Landing";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { DepthPicker } from "../components/DepthPicker";
+import type { DepthName, ProjectRecord } from "../types";
 
 export function Projects() {
   const { user, signIn, logout } = useAuth();
   const nav = useNavigate();
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<ProjectRecord[]>([]);
   const [premise, setPremise] = useState("");
-  const [depth, setDepth] = useState("scout");
+  const [depth, setDepth] = useState<DepthName>("scout");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [delId, setDelId] = useState<string | null>(null);
 
@@ -27,9 +30,12 @@ export function Projects() {
   const start = async () => {
     if (!premise.trim()) return;
     setBusy(true);
+    setError("");
     try {
       const p = await createProject(premise.trim(), depth);
       nav(`/p/${p.id}`);
+    } catch {
+      setError("Could not create the project. Check the connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -53,14 +59,11 @@ export function Projects() {
           value={premise}
           onChange={(e) => setPremise(e.target.value)}
         />
-        <div className="row">
-          <select value={depth} onChange={(e) => setDepth(e.target.value)}>
-            <option value="scout">Scout · minutes</option>
-            <option value="production">Production · deeper</option>
-            <option value="kubrick">Kubrick · obsessive</option>
-          </select>
+        <div className="project-create-controls">
+          <DepthPicker value={depth} onChange={setDepth} disabled={busy} />
           <button onClick={start} disabled={busy}>{busy ? "Creating…" : "Build the world"}</button>
         </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
       </section>
 
       <section>
