@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { MediaBit } from "./Media";
+import { Markdown } from "./Markdown";
 
 /** Clicks landing on nested interactive controls (a citation link, an audio
  *  scrubber, a button) should operate normally, not also open the modal. */
@@ -64,7 +65,7 @@ export function EvidenceModal({
         {evidence.modality && evidence.modality !== "text" && (
           <div className="modal-media"><MediaBit e={evidence} size="full" /></div>
         )}
-        {evidence.text && <p className="modal-text">{evidence.text}</p>}
+        {evidence.text && <Markdown className="modal-text">{evidence.text}</Markdown>}
 
         <div className="modal-meta">
           {evidence.source_domain && <div><span className="modal-meta-k">source</span>{evidence.source_domain}</div>}

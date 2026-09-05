@@ -223,14 +223,32 @@ def run_project(pid: str, uid: str = Depends(auth.current_uid)) -> StreamingResp
 # --------------------------------------------------------------------------- #
 # prior art: where this premise sits against films that already exist
 # --------------------------------------------------------------------------- #
+_prior_art_locks: dict[str, threading.Lock] = {}
+_prior_art_guard = threading.Lock()
+
+
+def _prior_art_lock(key: str) -> threading.Lock:
+    with _prior_art_guard:
+        return _prior_art_locks.setdefault(key, threading.Lock())
+
+
 @app.post("/api/projects/{pid}/prior-art")
 def survey_prior_art(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
     p = store.get_project(uid, pid)
     if not p:
         raise HTTPException(404, "not found")
-    report_data = prior_art_mod.survey(p["premise"]).to_dict()
-    store.set_prior_art(uid, pid, report_data)
-    return report_data
+    # One survey per project at a time. A second click, another tab, or a
+    # future auto-trigger during the research loop gets 409 instead of racing
+    # a duplicate survey and clobbering the stored result.
+    lock = _prior_art_lock(f"{uid}/{pid}")
+    if not lock.acquire(blocking=False):
+        raise HTTPException(409, "a prior-art survey is already running for this project")
+    try:
+        report_data = prior_art_mod.survey(p["premise"]).to_dict()
+        store.set_prior_art(uid, pid, report_data)
+        return report_data
+    finally:
+        lock.release()
 
 
 @app.get("/api/projects/{pid}/prior-art")

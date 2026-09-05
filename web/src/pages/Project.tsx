@@ -6,6 +6,7 @@ import { MediaBit } from "../components/Media";
 import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { EvidenceModal, isInteractiveClick } from "../components/EvidenceModal";
+import { Markdown } from "../components/Markdown";
 import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVerdicts } from "../data";
 import {
   ask, deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource,
@@ -27,6 +28,7 @@ export function Project() {
 
   const [activity, setActivity] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [streamLost, setStreamLost] = useState(false);
   const [progress, setProgress] = useState<Progress>({});
   const [liveEv, setLiveEv] = useState<any[]>([]);
   const [q, setQ] = useState("");
@@ -81,10 +83,12 @@ export function Project() {
   const push = (s: string) => setActivity((a) => [...a.slice(-120), s]);
 
   const start = async () => {
-    setRunning(true); setActivity([]); setLiveEv([]); setProgress({ phase: "planning" });
+    setRunning(true); setStreamLost(false); setActivity([]); setLiveEv([]);
+    setProgress({ phase: "planning" });
     try {
       await runProject(pid, (ev) => {
         if (ev.type === "progress") setProgress((p) => ({ ...p, ...ev }));
+        else if (ev.type === "disconnect") { setStreamLost(true); push(`FEED LOST — ${ev.reason}; run continues on the server`); }
         else if (ev.type === "evidence") {
           setLiveEv((cur) => [...cur, ...ev.items]);
           push(`+${ev.items.length} indexed · ${ev.objective}`);
@@ -152,7 +156,12 @@ export function Project() {
     if (surveying) return;
     setSurveying(true);
     try { setPriorArtLocal(await surveyPriorArt(pid)); }
-    catch { push("prior-art survey failed — is TMDB_API_KEY set on the backend?"); }
+    catch (e: any) {
+      const msg = String(e?.message || e);
+      push(/already running/i.test(msg)
+        ? "a prior-art survey is already running — it will appear here when it finishes"
+        : "prior-art survey failed — is TMDB_API_KEY set on the backend?");
+    }
     finally { setSurveying(false); }
   };
   const doUpload = async (f: File) => {
@@ -167,6 +176,13 @@ export function Project() {
       <p className="muted">Loading…</p>
     </div>
   );
+
+  // When the SSE stream is cut mid-run the loop keeps going on the server;
+  // fall back to the project's live Firestore document for progress and state.
+  const consoleOpen = running || streamLost || progress.phase === "done";
+  const shownProgress = streamLost ? { ...progress, ...(project.progress || {}) } : progress;
+  const runDone = !running && (progress.phase === "done" || project.status === "done");
+  const runErrored = project.status === "error";
 
   return (
     <div className="wrap">
@@ -210,8 +226,14 @@ export function Project() {
         {!editing && <button className="ghost" onClick={beginEdit}>Edit</button>}
       </div>
 
-      {(running || progress.phase === "done") && (
-        <ResearchConsole progress={progress} log={activity} done={!running && progress.phase === "done"} />
+      {consoleOpen && (
+        <ResearchConsole
+          progress={shownProgress}
+          log={activity}
+          done={runDone}
+          disconnected={streamLost && !runDone && !runErrored}
+          errorText={runErrored ? (project.error || "see the activity log below") : ""}
+        />
       )}
 
       <div className="grid">
@@ -384,7 +406,7 @@ export function Project() {
                  if ((ev.key === "Enter" || ev.key === " ") && !isInteractiveClick(ev)) setModalEv(a);
                }}>
             {a.modality && a.modality !== "text" && <MediaBit e={a} />}
-            <div>{a.text}</div>
+            <Markdown>{a.text}</Markdown>
             <div className="muted">
               {a.url ? <a href={a.url} target="_blank" rel="noopener">{a.citation}</a> : a.citation}
               {a.source === "director" ? " · your upload" : ""} · {a.score}

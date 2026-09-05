@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MODALITY_GLYPH } from "./Media";
 
 interface Box {
@@ -27,9 +28,30 @@ const PALETTE = [
   "#9a6fb0", "#c25b7c", "#a7c957", "#6a994e", "#adb5bd",
 ];
 
+const W = 720;
+const H = 460;
+const MIN_W = W * 0.2; // 5x zoom ceiling
+
+type View = { x: number; y: number; w: number; h: number };
+const FULL: View = { x: 0, y: 0, w: W, h: H };
+
+function clampView(v: View): View {
+  const w = Math.min(W, Math.max(MIN_W, v.w));
+  const h = w * (H / W);
+  const x = Math.min(Math.max(0, v.x), W - w);
+  const y = Math.min(Math.max(0, v.y), H - h);
+  return { x, y, w, h };
+}
+
+type Center = { x: number; y: number; color: string };
+type Dot = {
+  e: Ev; x: number; y: number; color: string;
+  isImg: boolean; thumb: string; glyph: string; director: boolean;
+};
+
 /** A dark canvas of research. Each box is a cluster; each evidence fragment a
- *  dot. Images show as thumbnails. Click a box to focus it, a dot to open it
- *  in the evidence modal, hover a dot for the citation. */
+ *  dot. Images show as thumbnails. Click a box to focus it, a dot to open it,
+ *  drag to pan, wheel or the controls to zoom, ⤢ to expand to full screen. */
 export function ResearchMap({
   boxes, evidence, selected, onSelect, onOpenEvidence,
 }: {
@@ -39,25 +61,23 @@ export function ResearchMap({
   onSelect: (id: string | null) => void;
   onOpenEvidence: (e: Ev) => void;
 }) {
-  const W = 720;
-  const H = 460;
-  const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const { centers, dots } = useMemo(() => {
     const n = Math.max(boxes.length, 1);
     const cx = W / 2, cy = H / 2;
     const R = Math.min(W, H) * 0.34;
-    const centers: Record<string, { x: number; y: number; color: string }> = {};
+    const centers: Record<string, Center> = {};
     boxes.forEach((b, i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
       centers[b.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), color: PALETTE[i % PALETTE.length] };
     });
-    const dots = evidence.map((e, i) => {
+    const dots: Dot[] = evidence.map((e, i) => {
       const c = centers[e.objective_id ?? ""] ?? { x: cx, y: cy, color: "#666" };
       const seed = (i * 2654435761) % 997;
       const rad = 14 + (seed % 42);
       const ang = (seed * 0.618) % (Math.PI * 2);
-      const thumb = e.image_url || (e.modality === "image" ? e.media_url : "");
+      const thumb = e.image_url || (e.modality === "image" ? e.media_url : "") || "";
       return {
         e,
         x: c.x + rad * Math.cos(ang),
@@ -73,10 +93,129 @@ export function ResearchMap({
     return { centers, dots };
   }, [boxes, evidence]);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [expanded]);
+
+  const shared = { boxes, centers, dots, selected, onSelect, onOpenEvidence };
+
   return (
-    <div style={{ position: "relative" }}>
-      <svg className="map" viewBox={`0 0 ${W} ${H}`} width="100%"
-           onClick={() => onSelect(null)}>
+    <>
+      <MapCanvas {...shared} onExpand={() => setExpanded(true)} />
+      {expanded && createPortal(
+        <div className="map-fullscreen">
+          <button type="button" className="ghost map-fs-close" onClick={() => setExpanded(false)}>
+            Close ✕
+          </button>
+          <MapCanvas {...shared} fullscreen />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+function MapCanvas({
+  boxes, centers, dots, selected, onSelect, onOpenEvidence, onExpand, fullscreen,
+}: {
+  boxes: Box[];
+  centers: Record<string, Center>;
+  dots: Dot[];
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+  onOpenEvidence: (e: Ev) => void;
+  onExpand?: () => void;
+  fullscreen?: boolean;
+}) {
+  const [view, setView] = useState<View>(FULL);
+  const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ px: number; py: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+
+  const zoomAt = useCallback((factor: number, fx = 0.5, fy = 0.5) => {
+    setView((v) => {
+      const w = Math.min(W, Math.max(MIN_W, v.w * factor));
+      const cx = v.x + fx * v.w;
+      const cy = v.y + fy * v.h;
+      return clampView({ x: cx - fx * w, y: cy - fy * (w * (H / W)), w, h: w * (H / W) });
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      zoomAt(
+        e.deltaY > 0 ? 1.15 : 1 / 1.15,
+        (e.clientX - rect.left) / rect.width,
+        (e.clientY - rect.top) / rect.height,
+      );
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomAt]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    drag.current = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y, w: view.w, h: view.h, moved: false };
+    suppressClick.current = false;
+    setPanning(true);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    if (Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) > 3) d.moved = true;
+    const dx = ((e.clientX - d.px) / rect.width) * d.w;
+    const dy = ((e.clientY - d.py) / rect.height) * d.h;
+    setView(clampView({ x: d.vx - dx, y: d.vy - dy, w: d.w, h: d.h }));
+    setHover(null);
+  };
+  const endPan = () => {
+    const d = drag.current;
+    drag.current = null;
+    setPanning(false);
+    if (!d) return;
+    suppressClick.current = d.moved;
+    if (!d.moved) onSelect(null);
+  };
+
+  const tip = hover && !panning
+    ? { left: `${((hover.x - view.x) / view.w) * 100}%`, top: `${((hover.y - view.y) / view.h) * 100}%` }
+    : null;
+
+  return (
+    <div className={`map-wrap${fullscreen ? " map-wrap-fs" : ""}`} ref={wrapRef}>
+      <div className="map-controls">
+        <button type="button" className="map-btn" title="Zoom in" aria-label="Zoom in"
+                onClick={() => zoomAt(1 / 1.3)}>+</button>
+        <button type="button" className="map-btn" title="Zoom out" aria-label="Zoom out"
+                onClick={() => zoomAt(1.3)}>−</button>
+        <button type="button" className="map-btn" title="Reset view" aria-label="Reset view"
+                onClick={() => setView(FULL)}>⊙</button>
+        {onExpand && (
+          <button type="button" className="map-btn" title="Expand" aria-label="Expand map"
+                  onClick={onExpand}>⤢</button>
+        )}
+      </div>
+
+      <svg className={`map${panning ? " grabbing" : ""}`}
+           viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} width="100%"
+           preserveAspectRatio="xMidYMid meet"
+           onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+           onPointerUp={endPan} onPointerLeave={endPan}>
         <defs>
           <radialGradient id="map-depth" cx="50%" cy="50%" r="72%">
             <stop offset="55%" stopColor="var(--map-bg)" />
@@ -104,7 +243,10 @@ export function ResearchMap({
           const dim = selected && selected !== b.id;
           return (
             <g key={b.id} opacity={dim ? 0.25 : 1} style={{ cursor: "pointer" }}
-               onClick={(ev) => { ev.stopPropagation(); onSelect(selected === b.id ? null : b.id); }}>
+               onClick={(ev) => {
+                 ev.stopPropagation();
+                 if (!suppressClick.current) onSelect(selected === b.id ? null : b.id);
+               }}>
               {b.emergent && (
                 <circle cx={c.x} cy={c.y} r={52} fill="none" stroke="var(--map-accent)" strokeWidth={1.5}>
                   <animate attributeName="r" values="30;58;30" dur="2.4s" repeatCount="indefinite" />
@@ -132,7 +274,7 @@ export function ResearchMap({
             onMouseLeave: () => setHover(null),
             onClick: (ev: React.MouseEvent) => {
               ev.stopPropagation();
-              onOpenEvidence(d.e);
+              if (!suppressClick.current) onOpenEvidence(d.e);
             },
           };
           if (d.isImg) {
@@ -157,11 +299,8 @@ export function ResearchMap({
           );
         })}
       </svg>
-      {hover && (
-        <div className="maptip" style={{ left: `${(hover.x / W) * 100}%`, top: `${(hover.y / H) * 100}%` }}>
-          {hover.label}
-        </div>
-      )}
+
+      {tip && <div className="maptip" style={tip}>{hover!.label}</div>}
     </div>
   );
 }
