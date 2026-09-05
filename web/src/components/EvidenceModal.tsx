@@ -74,7 +74,9 @@ export function EvidenceModal({
         {evidence.modality && evidence.modality !== "text" && (
           <div className="modal-media"><MediaBit e={evidence} size="full" /></div>
         )}
-        {evidence.text && <Markdown className="modal-text">{evidence.text}</Markdown>}
+        {evidence.text && (
+          <Markdown className="modal-text">{String(evidence.text).replace(/\s*[—–]\s*/g, ", ")}</Markdown>
+        )}
 
         <div className="modal-meta">
           {evidence.source_domain && <div><span className="modal-meta-k">source</span>{evidence.source_domain}</div>}
