@@ -11,7 +11,7 @@ export type TabId = "overview" | "departments" | "evidence" | "trace" | "prior-a
 export const TAB_IDS: TabId[] = ["overview", "departments", "evidence", "trace", "prior-art"];
 
 const cite = (e: Evidence) =>
-  [e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ");
+  tidy([e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · "));
 
 /** External text (scraped pages, TMDB synopses) arrives with nav chrome, wiki
  *  syntax, and em dashes the house style avoids. Normalise it for display. */
@@ -162,7 +162,7 @@ export function OverviewTab({
               <div className="beat-src">
                 {(b.sources || []).map((s: Evidence, j: number) => (
                   <button key={j} className="src-link" onClick={() => onOpen(s)}>
-                    {(s as any).cite || s.title || `source ${j + 1}`}
+                    {tidy((s as any).cite || s.title) || `source ${j + 1}`}
                   </button>
                 ))}
               </div>
