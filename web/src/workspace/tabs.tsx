@@ -225,7 +225,7 @@ export function DepartmentsTab({
 
 /* ── evidence: semantic map, All / department splits, modals ───────── */
 export function EvidenceTab({
-  boxes, evidence, selBox, setSelBox, dept, setDept, onOpen, footer, conflicts,
+  boxes, evidence, selBox, setSelBox, dept, setDept, onOpen, uploadSlot, conflicts,
 }: {
   boxes: ResearchBox[];
   evidence: Evidence[];
@@ -234,7 +234,7 @@ export function EvidenceTab({
   dept: string | null;
   setDept: (d: string | null) => void;
   onOpen: (e: Evidence) => void;
-  footer?: ReactNode;
+  uploadSlot?: ReactNode;
   conflicts?: Record<string, Verdict>;
 }) {
   const conflictIds = conflicts ? new Set(Object.keys(conflicts)) : undefined;
@@ -246,6 +246,7 @@ export function EvidenceTab({
   const selName = boxes.find((b) => b.id === selBox)?.name;
   return (
     <>
+      {uploadSlot}
       <section className="card">
         <div className="section-head">
           <div><p className="eyebrow">Semantic evidence space</p>
@@ -286,7 +287,6 @@ export function EvidenceTab({
           <EvidenceCards items={sel} onOpen={onOpen} conflicts={conflicts} />
         </section>
       )}
-      {footer}
     </>
   );
 }

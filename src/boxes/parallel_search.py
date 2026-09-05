@@ -189,7 +189,17 @@ def extract(
 # ----------------------------------------------------------------------------- #
 _JUNK = ("logo", "icon", "sprite", "avatar", "button", "1x1", "spacer", "pixel",
          "placeholder", "loading", "blank", "/emoji", "favicon", "badge")
-_UA = {"User-Agent": "the-boxes-research/0.1"}
+# A real browser string: archive.org, LOC, and museum sites (the hosts that
+# actually carry open audio and video) serve a stub or a 403 to an unknown
+# agent, which is why an audio-rich premise still harvested none.
+_UA = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 def _get_html(page_url: str, timeout: float = 8.0) -> str:
@@ -270,12 +280,19 @@ def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] |
         if not (data[:5] == b"%PDF-" or ct == "application/pdf"):
             return None
         return data, "application/pdf"
-    if want == "audio" and not ct.startswith("audio/"):
-        return None
-    if want == "video" and not ct.startswith("video/"):
-        return None
     ext = (_MEDIA_EXT.search(url) or [None, ""])[1].lower()
-    return data, (ct if "/" in ct else _MIME.get(ext, f"{want}/octet-stream"))
+    # Archive hosts serve downloads as octet-stream; trust the URL extension
+    # in that case, and sanity-check the file's magic bytes.
+    generic = ct in ("", "application/octet-stream", "binary/octet-stream", "application/download")
+    if want == "audio":
+        ok = ct.startswith("audio/") or (generic and ext in _MIME and _MIME[ext].startswith("audio/"))
+        if not ok or not (data[:3] == b"ID3" or data[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2") or data[:4] in (b"OggS", b"fLaC", b"RIFF") or data[4:8] == b"ftyp"):
+            return None
+    if want == "video":
+        ok = ct.startswith("video/") or (generic and ext in _MIME and _MIME[ext].startswith("video/"))
+        if not ok or not (data[4:8] == b"ftyp" or data[:4] == b"\x1aE\xdf\xa3" or data[:4] == b"RIFF"):
+            return None
+    return data, (ct if ct.startswith(("audio/", "video/")) else _MIME.get(ext, f"{want}/octet-stream"))
 
 
 def _rights(host: str) -> str:

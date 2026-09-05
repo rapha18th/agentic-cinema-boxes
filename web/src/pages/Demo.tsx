@@ -73,7 +73,7 @@ export function Demo() {
         </div>
         <div className="hero-actions">
           <Link className="primary-link" to="/">Build your own</Link>
-          <button className="ghost" onClick={() => window.print()}>Print brief</button>
+          <a className="ghost" href="/demo-dossier.pdf" download>Download dossier</a>
         </div>
       </section>
 

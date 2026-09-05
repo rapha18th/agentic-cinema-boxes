@@ -233,18 +233,23 @@ export function Project() {
           selBox={selBox} setSelBox={setSelBox}
           dept={dept} setDept={setDept}
           onOpen={setModalEv} conflicts={conflicts}
-          footer={
-            <section className="card">
-              <p className="eyebrow">Add your own reference</p>
+          uploadSlot={
+            <section className="card upload-card">
+              <div className="section-head">
+                <div><p className="eyebrow">Add your own reference</p>
+                  <h2 className="display-heading small">Bring your own material into the evidence space</h2></div>
+              </div>
               <div className="upload-row">
                 <select value={uploadBox} onChange={(e) => setUploadBox(e.target.value)}>
-                  <option value="">unfiled</option>
-                  {boxes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <option value="">file under: unfiled</option>
+                  {boxes.map((b) => <option key={b.id} value={b.id}>file under: {b.name}</option>)}
                 </select>
                 <input type="file" accept="text/plain,application/pdf,image/png,image/jpeg,image/webp"
                        disabled={uploading} onChange={(e) => e.target.files?.[0] && doUpload(e.target.files[0])} />
               </div>
-              <p className="muted">Text, PDF, PNG, JPEG, or WebP · maximum 12 MB · embedded natively into the same evidence space.</p>
+              <p className="muted">
+                {uploading ? "Embedding…" : "Text, PDF, PNG, JPEG, or WebP · up to 12 MB · embedded natively alongside the agent's findings."}
+              </p>
             </section>
           }
         />
