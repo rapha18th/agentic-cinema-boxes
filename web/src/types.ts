@@ -78,6 +78,8 @@ export interface ResearchRun {
 
 export interface Verdict {
   id?: string;
+  a_id?: string;
+  b_id?: string;
   relation: string;
   explanation: string;
   a_cite: string;

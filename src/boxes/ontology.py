@@ -46,6 +46,10 @@ the setting: money, institutions, architecture, streets, transport, work, class,
 politics, policing, crime, fashion, food, language, technology, media, sound,
 interiors, daily life. Bias toward what this specific premise needs.
 
+Write every "description" and "rationale" as one plain, declarative sentence.
+Never use an em dash or a contrastive construction such as "not X but Y",
+"whereas", or "unlike".
+
 Return JSON: a list of objects with keys "name" (2-4 words, uppercase),
 "description" (one sentence: what evidence answers this box), "rationale"
 (one sentence: why the film needs it), "departments" (1-3 values from this

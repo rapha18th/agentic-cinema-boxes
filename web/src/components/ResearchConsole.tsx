@@ -71,7 +71,7 @@ export function ResearchConsole({
       </div>
       {p.objective && !done && (
         <div className="rc-obj">
-          OBJECTIVE {objN}{objT ? ` / ${objT}` : ""} — <b>{p.objective}</b>
+          OBJECTIVE {objN}{objT ? ` / ${objT}` : ""} · <b>{p.objective}</b>
         </div>
       )}
 
@@ -84,7 +84,7 @@ export function ResearchConsole({
       <div className="rc-count">{p.evidence ?? 0} FRAGMENTS INDEXED</div>
 
       {errorText
-        ? <div className="rc-note rc-err">RUN ENDED WITH AN ERROR — {errorText}</div>
+        ? <div className="rc-note rc-err">RUN ENDED WITH AN ERROR · {errorText}</div>
         : disconnected && !done
           ? <div className="rc-note rc-warn">
               LIVE FEED LOST · THE RUN CONTINUES ON THE SERVER · THIS PAGE KEEPS UPDATING FROM SAVED DATA

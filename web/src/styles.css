@@ -324,10 +324,41 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .risk-row:hover { filter: none; transform: none; color: var(--accent); }
 .risk-row b { font: 500 12px var(--mono); }
 .risk-row small { grid-column: 1 / -1; color: var(--muted); }
-.department-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.department-card { margin: 0; }
-.department-card > div { padding: 12px 0; border-top: 1px solid var(--line); }
-.department-card p:not(.eyebrow) { margin: 5px 0 0; color: var(--muted); }
+/* departments: expandable packets, evidence per box */
+.department-stack { display: flex; flex-direction: column; gap: 12px; }
+.department-card { margin: 0; padding: 0; }
+.department-card > summary { list-style: none; cursor: pointer; display: flex;
+  justify-content: space-between; align-items: baseline; gap: 16px; padding: 16px 20px; }
+.department-card > summary::-webkit-details-marker { display: none; }
+.department-card > summary::before { content: "▸"; margin-right: 8px; color: var(--muted); font-size: 11px; }
+.department-card[open] > summary::before { content: "▾"; }
+.department-card > summary:hover { color: var(--accent); }
+.dept-name { font: 400 11px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--text); }
+.department-body { padding: 0 20px 18px; display: flex; flex-direction: column; gap: 18px; }
+.dept-box { border-top: 1px solid var(--line); padding-top: 14px; }
+.dept-box > header { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.dept-box > header b { font-size: 14px; }
+.dept-box > header .muted { font: 10px var(--mono); letter-spacing: .06em; white-space: nowrap; }
+.dept-box-note { margin: 6px 0 10px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.show-more { margin-top: 8px; }
+.neighbor-overview { margin: 4px 0 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+/* a fragment that appears in a cross-examination */
+.conflict-tag { display: inline-block; padding: 2px 7px; border-radius: 999px;
+  font: 9px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.evcard-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.evcard-tags .source-badge { margin-bottom: 0; }
+.evcard.conflicted { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.evcard.conflicted.contextualises { border-color: color-mix(in srgb, var(--context) 45%, var(--line)); }
+.evcard.conflicted.contextualises .conflict-tag { color: var(--context);
+  border-color: color-mix(in srgb, var(--context) 45%, var(--line)); }
+.modal-conflict { margin: 12px 0; padding: 12px 14px; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.modal-conflict.contextualises { border-color: color-mix(in srgb, var(--context) 45%, var(--line));
+  background: color-mix(in srgb, var(--context) 8%, transparent); }
+.modal-conflict p { margin: 8px 0 6px; font-size: 13px; line-height: 1.6; }
 .ask-compose, .upload-row { display: flex; align-items: center; gap: 8px; }
 .ask-compose input, .upload-row select { flex: 1; }
 .grounded-answer { margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }

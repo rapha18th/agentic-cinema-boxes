@@ -73,6 +73,10 @@ supports, contradicts, contextualises, unrelated.
 "contradicts" means they make claims that cannot both be true. "contextualises"
 means they differ but are reconcilable (different time, place, or scope).
 
+Write the explanation in plain, declarative sentences. State what A says, then
+state what B says. Do not use "whereas", "while", "unlike", "not X but Y", or
+any other contrastive construction. Do not use an em dash.
+
 Return JSON: {{"relation": "...", "explanation": "one or two sentences"}}"""
 
 

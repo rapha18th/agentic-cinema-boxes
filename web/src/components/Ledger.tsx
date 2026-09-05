@@ -69,7 +69,7 @@ export function Ledger({
           <div className="run" key={r.run}>
             <button className="run-head linkish" onClick={() => setOpen(isOpen ? null : r.run)}>
               {isOpen ? "▾" : "▸"} RESEARCH RUN {String(r.run).padStart(3, "0")}
-              <span className="muted"> — ready {pct(r.confidence_before)} → {pct(r.confidence_after)}</span>
+              <span className="muted"> · ready {pct(r.confidence_before)} → {pct(r.confidence_after)}</span>
             </button>
             {isOpen && (
               <div className="run-body">
