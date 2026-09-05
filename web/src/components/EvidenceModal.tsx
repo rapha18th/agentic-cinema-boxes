@@ -18,11 +18,12 @@ function citationLabel(e: any): string {
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function EvidenceModal({
-  evidence, boxName, onClose,
+  evidence, boxName, onClose, conflict,
 }: {
   evidence: any | null;
   boxName?: Record<string, string>;
   onClose: () => void;
+  conflict?: { relation: string; explanation: string; a_cite: string; b_cite: string; a_id?: string; b_id?: string } | null;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +62,14 @@ export function EvidenceModal({
           <div className="modal-title">{title}</div>
           {evidence.source === "director" && <span className="modal-badge">your upload</span>}
         </div>
+
+        {conflict && (
+          <div className={`modal-conflict ${conflict.relation}`}>
+            <span className="conflict-tag">{conflict.relation === "contradicts" ? "in conflict" : "context flagged"}</span>
+            <p>{conflict.explanation}</p>
+            <div className="muted">against: {evidence.id === conflict.a_id ? conflict.b_cite : conflict.a_cite}</div>
+          </div>
+        )}
 
         {evidence.modality && evidence.modality !== "text" && (
           <div className="modal-media"><MediaBit e={evidence} size="full" /></div>

@@ -36,9 +36,14 @@ EVIDENCE (id — citation — snippet):
 {catalog}
 
 Group the evidence into 4 to 6 beats that move from establishing the world to its
-texture and mood. Where an [image] item fits a beat, include it. Return JSON: a
-list of objects with keys "t" (timecode like "00:18", starting at "00:00"),
-"title" (2-4 words), "note" (one sentence), "evidence_ids" (list of ids)."""
+texture and mood. Where an [image] item fits a beat, include it.
+
+Write "note" as one plain, declarative sentence. Never use an em dash. Never
+use a contrastive construction such as "not X but Y", "whereas", or "unlike".
+
+Return JSON: a list of objects with keys "t" (timecode like "00:18", starting
+at "00:00"), "title" (2-4 words), "note" (one sentence), "evidence_ids" (list
+of ids)."""
 
 
 def build_reel(premise: str, evidence: list[Evidence], *, limit: int = 28) -> list[ReelBeat]:

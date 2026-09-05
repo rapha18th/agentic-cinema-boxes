@@ -16,10 +16,12 @@ from . import llm
 
 _STYLE = (
     "Write in plain, spare, declarative sentences. Keep sentences short. "
-    "Never use an em dash. Never write contrastive constructions: no "
-    "\"not X, it's Y\", no \"while X, Y\", no \"whereas\", no \"unlike X\". "
-    "State each fact on its own, plainly, in the order it matters. The "
-    "reader has never seen this project before and has nothing else to go on."
+    "Never use an em dash. Never set one idea against another: no "
+    "\"not X, it's Y\", no \"while X, Y\", no \"whereas\", no \"unlike X\", "
+    "no \"rather than\", no \"instead of\", no \"X or Y, avoiding Z\". "
+    "When you mention prior films, state what each one does on its own line, "
+    "plainly, and stop. State each fact on its own, in the order it matters. "
+    "The reader has never seen this project before and has nothing else to go on."
 )
 
 _PROMPT = """You are writing the human-readable narrative for a film \

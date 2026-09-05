@@ -20,20 +20,19 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
         <div className="landing-monolith" aria-hidden="true" />
         <h1 className="landing-title">THE BOXES</h1>
         <p className="landing-lede">
-          Turn a film premise into an evidence-backed production bible. Live sources,
-          department briefs, originality analysis, and unresolved factual risks.
+          Turn a film premise into an evidence-backed production bible.
         </p>
         <div className="landing-actions">
-          <Link className="demo-btn" to="/demo">Explore the finished dossier</Link>
+          <Link className="demo-btn" to="/demo">See a finished dossier</Link>
           <button className="gbtn" onClick={onSignIn}>
             <span className="gbtn-icon"><GoogleMark /></span>
             Start with Google
           </button>
         </div>
         <div className="landing-proof" aria-label="Example dossier contents">
-          <span><b>42</b> cited fragments</span>
-          <span><b>7</b> departments briefed</span>
-          <span><b>3</b> risks surfaced</span>
+          <span><b>203</b> cited fragments</span>
+          <span><b>11</b> research boxes</span>
+          <span><b>40</b> films compared</span>
         </div>
       </div>
       <p className="landing-foot">Agentic Cinema hackathon · Parallel track</p>

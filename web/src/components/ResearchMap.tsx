@@ -23,7 +23,7 @@ interface Ev {
 }
 
 // A filmic set: distinguishable per box, but harmonised and slightly
-// desaturated so the canvas reads as one image rather than a legend.
+// desaturated so the canvas reads as a single composed image.
 const PALETTE = [
   "#e4572e", "#f6ae2d", "#d4b483", "#e0c1b3", "#c98986",
   "#8f6c4f", "#5b8a72", "#4c9f9f", "#5c7aa8", "#7b6d8d",
@@ -55,13 +55,14 @@ type Dot = {
  *  dot. Images show as thumbnails. Click a box to focus it, a dot to open it,
  *  drag to pan, wheel or the controls to zoom, ⤢ to expand to full screen. */
 export function ResearchMap({
-  boxes, evidence, selected, onSelect, onOpenEvidence,
+  boxes, evidence, selected, onSelect, onOpenEvidence, conflictIds,
 }: {
   boxes: Box[];
   evidence: Ev[];
   selected: string | null;
   onSelect: (id: string | null) => void;
   onOpenEvidence: (e: Ev) => void;
+  conflictIds?: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -120,7 +121,7 @@ export function ResearchMap({
     };
   }, [expanded]);
 
-  const shared = { boxes, centers, dots, selected, onSelect, onOpenEvidence };
+  const shared = { boxes, centers, dots, selected, onSelect, onOpenEvidence, conflictIds };
 
   return (
     <>
@@ -139,7 +140,7 @@ export function ResearchMap({
 }
 
 function MapCanvas({
-  boxes, centers, dots, selected, onSelect, onOpenEvidence, onExpand, fullscreen,
+  boxes, centers, dots, selected, onSelect, onOpenEvidence, onExpand, fullscreen, conflictIds,
 }: {
   boxes: Box[];
   centers: Record<string, Center>;
@@ -149,6 +150,7 @@ function MapCanvas({
   onOpenEvidence: (e: Ev) => void;
   onExpand?: () => void;
   fullscreen?: boolean;
+  conflictIds?: Set<string>;
 }) {
   const [view, setView] = useState<View>(FULL);
   const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
@@ -285,7 +287,14 @@ function MapCanvas({
 
         {dots.map((d, i) => {
           const dim = selected && selected !== d.e.objective_id;
-          const label = `${d.e.title || d.e.modality || "evidence"}${d.director ? " · your upload" : ""}`;
+          const conflicted = conflictIds?.has(d.e.id);
+          const label = `${d.e.title || d.e.modality || "evidence"}${conflicted ? " · cross-examined" : ""}${d.director ? " · your upload" : ""}`;
+          const ring = conflicted ? (
+            <circle cx={d.x} cy={d.y} r={d.isImg ? 12 : 6} fill="none"
+                    stroke="var(--device-red)" strokeWidth={1.4} opacity={0.92} pointerEvents="none">
+              <animate attributeName="opacity" values="0.92;0.3;0.92" dur="2.2s" repeatCount="indefinite" />
+            </circle>
+          ) : null;
           const common = {
             opacity: dim ? 0.15 : 1,
             style: { cursor: "pointer" },
@@ -305,6 +314,7 @@ function MapCanvas({
           if (d.isImg) {
             return (
               <g key={i} {...common}>
+                {ring}
                 <image href={d.thumb} x={d.x - 9} y={d.y - 9} width={18} height={18}
                        clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice" />
                 <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} />
@@ -313,14 +323,18 @@ function MapCanvas({
           }
           if (d.glyph) {
             return (
-              <text key={i} x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11}
-                    fill={d.color} {...common}>{d.glyph}</text>
+              <g key={i} {...common}>
+                {ring}
+                <text x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11} fill={d.color}>{d.glyph}</text>
+              </g>
             );
           }
           return (
-            <circle key={i} cx={d.x} cy={d.y} r={d.director ? 3.8 : 2.7}
-                    fill={d.color} stroke={d.director ? "var(--map-accent)" : "none"} strokeWidth={d.director ? 1 : 0}
-                    {...common} />
+            <g key={i} {...common}>
+              {ring}
+              <circle cx={d.x} cy={d.y} r={d.director ? 3.8 : 2.7}
+                      fill={d.color} stroke={d.director ? "var(--map-accent)" : "none"} strokeWidth={d.director ? 1 : 0} />
+            </g>
           );
         })}
       </svg>
