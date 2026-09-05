@@ -45,7 +45,7 @@ function clampView(v: View): View {
   return { x, y, w, h };
 }
 
-type Center = { x: number; y: number; color: string };
+type Center = { x: number; y: number; color: string; lx: number; ly: number; anchor: "start" | "middle" | "end" };
 type Dot = {
   e: Ev; x: number; y: number; color: string;
   isImg: boolean; thumb: string; glyph: string; director: boolean;
@@ -69,22 +69,56 @@ export function ResearchMap({
   const { centers, dots } = useMemo(() => {
     const n = Math.max(boxes.length, 1);
     const cx = W / 2, cy = H / 2;
-    const R = Math.min(W, H) * 0.34;
+    const R = Math.min(W, H) * 0.32;
+    // Boxes sit on an even ring, so every label is readable and the spokes fan
+    // out cleanly. Labels are pushed further along the same radial and pinned
+    // to the near edge, so 11 of them do not stack.
     const centers: Record<string, Center> = {};
     boxes.forEach((b, i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      centers[b.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), color: PALETTE[i % PALETTE.length] };
+      const bx = cx + R * Math.cos(a);
+      const by = cy + R * Math.sin(a);
+      const cos = Math.cos(a);
+      centers[b.id] = {
+        x: bx, y: by, color: PALETTE[i % PALETTE.length],
+        lx: Math.min(W - 6, Math.max(6, cx + (R + 34) * cos)),
+        ly: cy + (R + 34) * Math.sin(a) + 3,
+        anchor: cos < -0.25 ? "end" : cos > 0.25 ? "start" : "middle",
+      };
     });
+
+    // map_x / map_y place a dot relative to its own box, not on a global axis a
+    // few outliers can dominate. Offsets are scaled and clamped inside the
+    // cluster; fragments with no projection fall back to a stable hash scatter.
+    const bc: Record<string, { x: number; y: number; n: number }> = {};
+    evidence.forEach((e) => {
+      if (e.map_x == null || e.map_y == null) return;
+      const k = e.objective_id ?? "";
+      const acc = (bc[k] ??= { x: 0, y: 0, n: 0 });
+      acc.x += e.map_x; acc.y += e.map_y; acc.n += 1;
+    });
+    const SPREAD = 540;
+    const MAXR = 44;
+    const fallback = { x: cx, y: cy, color: "#666", lx: cx, ly: cy, anchor: "middle" as const };
     const dots: Dot[] = evidence.map((e) => {
-      const c = centers[e.objective_id ?? ""] ?? { x: cx, y: cy, color: "#666" };
-      const seed = [...e.id].reduce((acc, ch) => ((acc * 31) + ch.charCodeAt(0)) >>> 0, 2166136261) % 997;
-      const rad = 14 + (seed % 42);
-      const ang = (seed * 0.618) % (Math.PI * 2);
+      const c = centers[e.objective_id ?? ""] ?? fallback;
+      const b = bc[e.objective_id ?? ""];
+      let x: number, y: number;
+      if (e.map_x != null && e.map_y != null && b && b.n > 1) {
+        let ox = (e.map_x - b.x / b.n) * SPREAD;
+        let oy = (e.map_y - b.y / b.n) * SPREAD;
+        const d = Math.hypot(ox, oy) || 1;
+        if (d > MAXR) { ox = (ox / d) * MAXR; oy = (oy / d) * MAXR; }
+        x = c.x + ox; y = c.y + oy;
+      } else {
+        const seed = [...e.id].reduce((acc, ch) => ((acc * 31) + ch.charCodeAt(0)) >>> 0, 2166136261) % 997;
+        const rad = 12 + (seed % 28);
+        const ang = (seed * 0.618) % (Math.PI * 2);
+        x = c.x + rad * Math.cos(ang); y = c.y + rad * Math.sin(ang);
+      }
       const thumb = e.image_url || (e.modality === "image" ? e.media_url : "") || "";
       return {
-        e,
-        x: e.map_x != null ? e.map_x * W : c.x + rad * Math.cos(ang),
-        y: e.map_y != null ? e.map_y * H : c.y + rad * Math.sin(ang),
+        e, x, y,
         color: e.source === "director" ? "#ffffff" : c.color,
         isImg: e.modality === "image" && !!thumb,
         thumb,
@@ -92,19 +126,6 @@ export function ResearchMap({
           ? MODALITY_GLYPH[e.modality] : "",
         director: e.source === "director",
       };
-    });
-    // Once the backend has projected the embedding matrix, anchor each box at
-    // the centroid of its evidence. During a live run the stable hash fallback
-    // keeps new fragments from reshuffling their neighbours.
-    boxes.forEach((b) => {
-      const semantic = dots.filter((d) => d.e.objective_id === b.id && d.e.map_x != null);
-      if (semantic.length) {
-        centers[b.id] = {
-          x: semantic.reduce((sum, d) => sum + d.x, 0) / semantic.length,
-          y: semantic.reduce((sum, d) => sum + d.y, 0) / semantic.length,
-          color: centers[b.id].color,
-        };
-      }
     });
     return { centers, dots };
   }, [boxes, evidence]);
@@ -277,8 +298,10 @@ function MapCanvas({
               <circle cx={c.x} cy={c.y} r={Math.max(7, (b.score ?? 0) * 18)}
                       fill={c.color} opacity={selected === b.id ? 0.4 : 0.2}
                       stroke={selected === b.id ? c.color : "none"} strokeWidth={1.5} />
-              <text x={c.x} y={c.y - 62} fill="var(--map-ink)" fontSize={10} textAnchor="middle"
-                    fontWeight={selected === b.id ? 700 : 400}>
+              <line x1={c.x} y1={c.y} x2={c.lx} y2={c.ly - 3} stroke="var(--map-grid)" strokeWidth={0.75} />
+              <text x={c.lx} y={c.ly} fill="var(--map-ink)" fontSize={9.5} textAnchor={c.anchor}
+                    fontWeight={selected === b.id ? 700 : 400} paintOrder="stroke"
+                    stroke="var(--map-bg)" strokeWidth={2.5} strokeLinejoin="round">
                 {b.name}{b.emergent ? " ✦" : ""}
               </text>
             </g>

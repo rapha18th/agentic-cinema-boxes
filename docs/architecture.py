@@ -72,7 +72,7 @@ ax.text(0.3, 10.2, "Autonomous multimodal research department for filmmakers    
 
 # -- Zone: browser -----------------------------------------------------
 zone(0.3, 0.7, 3.1, 8.9, "User's browser", Z_BLUE)
-tile(1.85, 6.9, "React app", "map · console\nledger · reel", color=YELLOW, r=0.5)
+tile(1.85, 6.9, "React app", "results-first dossier\ntabs · map · console", color=YELLOW, r=0.5)
 tile(1.85, 3.4, "Firebase Auth", "isolated per user", color=GREEN, r=0.5)
 
 # -- Zone: Google Cloud ---------------------------------------------
@@ -88,13 +88,13 @@ tile(7.7, 7.95, "Search API", "web", color=PURPLE, r=0.32)
 tile(9.1, 7.95, "Extract API", "full text", color=PURPLE, r=0.32)
 tile(10.6, 7.95, "TMDB", "movie prior art", color=PURPLE, r=0.32)
 cluster(12.1, 6.95, 4.15, 1.9, "Vertex AI  ·  global")
-tile(13.2, 7.95, "Gemini 3.8 Flash", "planning · verdicts", color=BLUE, r=0.36)
+tile(13.2, 7.95, "Gemini 3.8 Flash", "planning · verdicts\ngrounded answers", color=BLUE, r=0.36)
 tile(15.15, 7.95, "Gemini Embedding 2", "one multimodal space", color=BLUE, r=0.36)
 
 # -- the loop -----------------------------------------------------
 cluster(6.7, 1.65, 9.6, 4.15, "")
 ax.text(6.95, 5.5, "Autonomous research loop", fontsize=10, color=INK, weight="bold", ha="left", zorder=4)
-ax.text(6.95, 5.26, "concurrent Python  ·  ADK tool surface  ·  Cloud Run service",
+ax.text(6.95, 5.26, "ADK workflow agent  ·  concurrent Python  ·  Cloud Run",
         fontsize=8, color=SUB, ha="left", zorder=4)
 
 seq = [("1 PLAN", GREEN, None), ("2 ACQUIRE", RED, "per objective"), ("3 EMBED", BLUE, "per fragment"),
@@ -141,7 +141,7 @@ ax.text(11.51, 4.72, "gate · 3 in-flight", fontsize=6.7, color=BLUE, weight="bo
 
 # right column: Data
 cluster(16.5, 1.6, 3.9, 6.75, "Data")
-tile(18.45, 6.6, "Cloud Firestore", "boxes · evidence\nruns · verdicts · reel", color=GREEN, r=0.44)
+tile(18.45, 6.6, "Cloud Firestore", "boxes · evidence · vectors\nruns · verdicts · reel · lease", color=GREEN, r=0.44)
 tile(18.45, 3.5, "Cloud Storage", "source files · uploads", color=YELLOW, r=0.44)
 
 # -- browser <-> Cloud Run --------------------------------------
@@ -156,7 +156,7 @@ wire([(5.05, 4.0), (5.05, 1.25), (17.15, 1.25), (17.15, 3.3), (18.05, 3.3)],
 wire([(17.7, 3.5), (17.15, 3.5), (17.15, 6.6), (18.05, 6.6)], color=GREEN, lw=2.0)
 
 ax.text(0.3, 0.32, "Vertex AI serves Gemini on the  global  location.        Parallel Search + Extract runs on every "
-        "research round.        TMDB seeds the prior-art survey.", fontsize=8, color=SUB)
+        "research round.        TMDB seeds the prior-art survey.        A Firestore lease makes each run resumable and single-writer.", fontsize=8, color=SUB)
 
 plt.savefig("architecture.png", dpi=135, bbox_inches="tight", facecolor="white", pad_inches=0.28)
 print("ok")

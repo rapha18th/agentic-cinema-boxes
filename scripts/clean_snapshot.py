@@ -13,6 +13,10 @@ import re
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "service"))
+
 _JUNK = (
     "instagram.com", "shiksha.com", "careers360.com", "collegedunia.com",
     "quora.com", "pinterest.", "facebook.com", "tiktok.com",
@@ -80,6 +84,26 @@ def main() -> None:
     d.setdefault("stop_reason", "")
 
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # A downloadable dossier for the read-only demo, built from the same data.
+    pdf_path = p.parent / "demo-dossier.pdf"
+    try:
+        import report as report_mod  # noqa: PLC0415
+
+        project = {
+            "id": "demo", "premise": d["premise"], "title": d.get("title", ""),
+            "confidence": d.get("confidence", 0.0), "coverage": d.get("coverage", 0.0),
+            "overview": d.get("overview", ""),
+        }
+        pdf = report_mod.build_report_pdf(
+            project=project, boxes=d["boxes"], evidence=d["evidence"],
+            verdicts=d["verdicts"], runs=d["runs"], reel=d.get("reel", []),
+            prior_art=d.get("prior_art"),
+        )
+        pdf_path.write_bytes(pdf)
+        print(f"wrote {pdf_path.name} ({len(pdf) // 1024} KB)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"PDF build skipped: {exc}")
 
     slips = []
     fields = [("overview", d.get("overview", ""))]

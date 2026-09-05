@@ -110,7 +110,13 @@ def find_contradictions(
     """Run both stages. Returns only the verified contradicts / contextualises
     verdicts, most similar first. Each pair's Gemini verdict is independent of
     every other, so they verify concurrently rather than one at a time."""
-    pairs = candidate_pairs(vectors, max_pairs=max_checks)
+    pairs = candidate_pairs(vectors, max_pairs=max_checks * 2)
+    # Two fragments off the same page cannot cross-examine each other; a
+    # disagreement there is a scraping artefact, not a research finding.
+    pairs = [
+        p for p in pairs
+        if not (evidence[p[0]].url and evidence[p[0]].url == evidence[p[1]].url)
+    ][:max_checks]
     if not pairs:
         return []
     with ThreadPoolExecutor(max_workers=min(max_workers, len(pairs))) as ex:
