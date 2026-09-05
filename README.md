@@ -5,7 +5,7 @@ An autonomous research department for filmmakers.
 Give it a film premise and whatever creative material you already have. It builds
 a research plan, searches the live web through Parallel, extracts and embeds
 multimodal evidence, measures what it still does not understand, opens its own
-follow-up boxes, and stops when it is confident. It also surveys existing films
+follow-up boxes, and stops when the planned research is sufficiently complete. It also surveys existing films
 for a similar premise and states where this one is still unclaimed. The result
 is a living, source-backed research archive you can explore with text, images,
 documents, audio, or video, or read as a self-contained PDF dossier.
@@ -23,7 +23,8 @@ Cloud project. Configure your own with `.env` / `web/.env` / `.firebaserc`
 Kubrick kept about a thousand boxes of research per film. Clippings, photos,
 books, interviews, maps. That pile was his edge, and building it took a team
 months of library time. THE BOXES gives every filmmaker the same pile, built
-overnight, searchable from a phone.
+overnight, searchable from a phone. A public, read-only judge dossier at `/demo`
+shows the complete experience without requiring an account.
 
 You type a premise, drop in a few references, and walk away. You come back to a
 research library you can question in plain language, with every claim cited, plus
@@ -31,8 +32,9 @@ a reference reel cut from the strongest material.
 
 ## How the loop works
 
-The agent runs on Cloud Run behind Google's Agent Development Kit. The loop's
-control flow is plain, concurrent Python. Objectives research in parallel,
+The production API runs the deterministic loop through a custom Google Agent
+Development Kit `BaseAgent` on Cloud Run. The loop's control flow is plain,
+concurrent Python. Objectives research in parallel,
 contradiction checks and embeddings verify concurrently, and ADK exposes the
 whole thing as a conversational tool surface (`plan_research`, `run_research`,
 `query_index`, ...). Every step streams to the browser as it happens.
@@ -46,13 +48,13 @@ whole thing as a conversational tool surface (`plan_research`, `run_research`,
    text, and the pages it surfaces are mined for pictures, PDFs, audio, and
    video. Audio and video are trimmed to a short clip with ffmpeg.
 3. **EMBED.** Every fragment, text or image or PDF or audio or video, becomes a
-   vector with Gemini Embedding 2, embedded concurrently. One 3,072-dimension
-   multimodal space, a 768 cut for the hot index. A reference photo and an
+   vector with Gemini Embedding 2, embedded concurrently. One normalized
+   768-dimensional multimodal index. A reference photo and an
    archival photo sit next to each other; a needle-drop sits next to a
    paragraph.
 4. **MEASURE.** Per objective: how much evidence supports it and how diverse the
-   sources are. Rolled up with source diversity, provenance quality, and a
-   genuine-contradiction penalty into one **research confidence** number.
+   sources are. Rolled up with source diversity, a visible deterministic
+   source-quality score, and a genuine-contradiction penalty into **research completeness**.
 5. **VERIFY.** Embedding similarity finds pairs of evidence about the same thing.
    Gemini then reads both and classifies the relationship as supports,
    contradicts, contextualises, or unrelated, with an explanation and both
@@ -61,7 +63,7 @@ whole thing as a conversational tool surface (`plan_research`, `run_research`,
 6. **GAP.** The thinnest objectives get fresh queries. If the evidence keeps
    circling a concept with no box, Gemini proposes one and the agent opens it.
 
-The loop ends on its own when confidence reaches the depth's target, or every
+The loop ends on its own when completeness reaches the depth's target, or every
 objective is well covered, or the round budget runs out.
 
 ## Prior art
@@ -89,8 +91,8 @@ BOXES harvests the other modalities from the pages Parallel surfaces:
 | audio | `<audio>`, og:audio, direct `.mp3` / `.wav` / `.m4a` links | ffmpeg-trimmed clip + caption |
 | video | `<video>`, og:video, direct `.mp4` / `.webm` links | ffmpeg-trimmed clip + caption |
 
-Every asset keeps its full source URL and a rights note (`likely reusable` for
-wikimedia, loc.gov, nasa.gov, si.edu, archive.org; `check rights` otherwise).
+Every asset keeps its full source URL and a conservative rights note (`open-access
+host · verify item rights` for known archives; `rights not verified` otherwise).
 Trimmed clips link back to the full recording at its source.
 
 ## The app
@@ -98,15 +100,16 @@ Trimmed clips link back to the full recording at its source.
 | Surface | What it does |
 |---|---|
 | **Research map** | Dark canvas, a dot per fragment coloured by box; images are thumbnails, other media are glyphs. Click a box to focus it; click any dot to open it in a detail modal, full text and media included; filter the whole map by production department. Emergent boxes pulse. |
-| **Cinematic console** | A 2001-style mission-control panel while a run is active: phase headline (`ACQUIRING`, `CROSS-EXAMINING SOURCES`), block-character progress bars for objective / coverage / confidence, a fragment counter, a teletype log, a scanline. |
+| **Cinematic console** | A 2001-style mission-control panel while a run is active: phase headline (`ACQUIRING`, `CROSS-EXAMINING SOURCES`), block-character progress bars for objective / coverage / readiness, a fragment counter, a teletype log, a scanline. |
 | **Expandable ledger** | One row per research pass, expandable to that pass's search queries and a compact, deduplicated list of the evidence it added. Click any item for the same detail modal as the map. |
 | **Contradictions** | Verified verdicts with the explanation and both citations. |
 | **Departments** | Every box tagged with the crews it briefs (script, casting, costume, art direction, sound, cinematography, locations); filter the map or the PDF report down to one department's evidence. |
 | **Prior art** | Survey on demand; a poster grid of the closest existing films and the angles none of them take, each grounded in named titles. |
 | **Add your own reference** | Upload a text, PDF, or image to any box. It is embedded into the same space as the agent's findings. |
-| **Ask the boxes** | A cited answer from the index; image and media answers render inline. |
+| **Ask the boxes** | Retrieves the strongest evidence, synthesizes an answer using only those fragments, cites factual sentences, and abstains when the archive is thin. |
 | **Reference reel** | Timed beats, each with clickable sources and inline audio or video players. |
 | **PDF dossier** | One click builds a self-contained report: a synthesized picture of the world up top, then every box as a plain-language summary plus its deduplicated sources, contradictions, the reel, department packets, and the prior-art survey. Readable with no other context. |
+| **Judge dossier** | A zero-auth, rights-safe walkthrough at `/demo`, structured around production decisions instead of telemetry. |
 | **Theme** | Light, dark, or system, everywhere including the landing page. |
 
 Evidence and progress are persisted to Firestore as they stream, so the map and
@@ -114,23 +117,25 @@ box counts fill in live during a run.
 
 ## Research depth
 
-The same agent, tuned for how hard it digs.
+The same agent, tuned for how hard it digs. The cinematic names stay visible;
+hover or keyboard-focus a depth in the app to reveal runtime, relative API spend,
+and expected output.
 
-| Depth | Objectives | Follow-up rounds | Confidence target | Images / PDFs / A-V per round |
-|---|---:|---:|---:|---:|
-| scout | 5 | up to 2 | 80% | 4 / 2 / 2 |
-| production | 10 | up to 3 | 82% | 10 / 5 / 4 |
-| kubrick | 16 | up to 6 | 90% | 20 / 10 / 8 |
+| Depth | Typical time | Relative cost | Objectives | Follow-up rounds | Completeness target | Images / PDFs / A-V per round |
+|---|---:|---:|---:|---:|---:|---:|
+| scout | 2–4 min | 1× | 5 | up to 2 | 80% | 4 / 2 / 2 |
+| production | 6–12 min | 3× | 10 | up to 3 | 82% | 10 / 5 / 4 |
+| kubrick | 15–30 min | 8× | 16 | up to 6 | 90% | 20 / 10 / 8 |
 
 ## Stack
 
 | Part | Choice |
 |---|---|
-| Agent | Google Agent Development Kit (ADK) tool surface on Cloud Run. The loop's own control flow is concurrent Python: objectives, contradiction checks, and embeddings all run in parallel |
+| Agent | A custom Google ADK `BaseAgent` is the production workflow entry point on Cloud Run; the conversational ADK tool surface uses the same loop |
 | Reasoning | Gemini 3.8 Flash (`gemini-3.8-flash`, GA 2 September 2026), Vertex AI `global` location |
-| Acquisition | Parallel **Search** + **Extract**, imported and called on the hot path every round |
+| Acquisition | Parallel **Search** + **Extract** APIs, called on the hot path in every round |
 | Prior art | TMDB for the candidate pool, Parallel Search to broaden past its tagging |
-| Embeddings | Gemini Embedding 2 (`gemini-embedding-2`), natively multimodal, 3,072-dim stored, 768-dim hot index |
+| Embeddings | Gemini Embedding 2 (`gemini-embedding-2`), natively multimodal, using a normalized 768-dimensional index stored separately from browser-facing evidence metadata |
 | Frontend | Vite + React, Firebase Hosting |
 | Auth | Firebase Authentication (Google), one isolated project subtree per user |
 | Persistence | Cloud Firestore (`users/{uid}/…`), Cloud Storage for source files and uploads |
@@ -150,13 +155,14 @@ src/boxes/
   ontology.py         research plan + emergent-box detection, batched per round
   parallel_search.py  Parallel Search + Extract, plus image/pdf/audio/video harvest
   media.py            ffmpeg trims audio/video to a short clip
-  coverage.py         per-objective coverage + research confidence + stopping rule
+  coverage.py         per-objective coverage + research completeness + stopping rule
   contradiction.py    embedding candidate pairs, Gemini verdicts, verified concurrently
   prior_art.py        TMDB + Parallel candidate pool, embedding-ranked, Gemini positioning
   synthesis.py        plain-language narrative for the PDF report, box by box
   depth.py            scout / production / kubrick presets
   ledger.py           the per-round research ledger
   reel.py             the reference reel
+  workflow.py         custom ADK BaseAgent used by the production API
   research_loop.py    the autonomous loop; objectives research concurrently each round
   agent.py            the ADK agent and its tools
   vectorstore.py      brute-force nearest neighbor
@@ -188,6 +194,7 @@ with a thinner pool.
 ```bash
 python scripts/probe_access.py           # confirm model access
 python scripts/research_run.py scout "A political drama during the founding of NASA in 1958"
+python -m unittest discover -s tests -v  # deterministic core checks
 adk web src                              # local ADK dev UI at localhost:8000
 
 # full stack

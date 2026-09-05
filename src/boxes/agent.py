@@ -3,7 +3,7 @@
 `root_agent` runs on Gemini 3.8 Flash (GA 2 September 2026, id `gemini-3.8-flash`,
 built for agentic multi-step reasoning). It is the reasoning surface over the
 autonomous research loop: it can plan, launch a research run, read coverage and
-confidence, list verified contradictions, answer from the index with citations,
+research completeness, list verified contradictions, answer from the index with citations,
 and cut a reference reel.
 """
 
@@ -37,15 +37,15 @@ def plan_research(premise: str, objectives: int = 8) -> dict:
 
 def run_research(premise: str, depth: str = "scout") -> dict:
     """Run the autonomous research loop: plan, search and extract through Parallel,
-    embed evidence, measure coverage and confidence, verify contradictions, and
-    open follow-up boxes on its own until confidence hits the target.
+    embed evidence, measure coverage and completeness, verify contradictions, and
+    open follow-up boxes on its own until the completeness target is reached.
 
     Args:
         premise: The film premise.
         depth: "scout" (fast, for a demo), "production", or "kubrick" (obsessive).
 
     Returns:
-        The research ledger, final coverage and confidence, box list, and counts.
+        The research ledger, final coverage and completeness, box list, and counts.
     """
     global _PROJECT
     _PROJECT = rl.run(premise, depth=depth)
@@ -67,7 +67,7 @@ def run_research(premise: str, depth: str = "scout") -> dict:
 
 
 def coverage_report() -> dict:
-    """Current coverage per box and overall research confidence."""
+    """Current coverage per box and overall research completeness."""
     if not _PROJECT or not _PROJECT.reports:
         return {"error": "no research run yet; call run_research first"}
     rep = _PROJECT.reports[-1]

@@ -1,8 +1,8 @@
-"""Coverage and research confidence.
+"""Coverage and research completeness.
 
 Coverage is measured per research objective, never against empty regions of
 embedding space. For each objective: how much evidence supports it, how diverse
-the sources are. Research confidence rolls those up with source diversity,
+the sources are. Research completeness rolls those up with source diversity,
 provenance quality, and a penalty for unresolved contradictions, and gives the
 loop a real stopping criterion.
 """
@@ -29,6 +29,7 @@ class ObjectiveCoverage:
     evidence_count: int
     distinct_domains: int
     score: float           # 0..1
+    quality: float
     thinnest_terms: list[str]
 
     def to_dict(self) -> dict:
@@ -50,7 +51,7 @@ class CoverageReport:
 
     def summary(self) -> str:
         return (
-            f"confidence {self.confidence:.0%} | coverage {self.overall_coverage:.0%} | "
+            f"readiness {self.confidence:.0%} | coverage {self.overall_coverage:.0%} | "
             f"diversity {self.source_diversity:.0%} | provenance {self.provenance_quality:.0%} | "
             f"open contradictions {self.unresolved_contradictions}"
         )
@@ -83,7 +84,12 @@ def build_report(
         mine = [evidence[k] for k, a in enumerate(assign) if a == oi]
         domains = Counter(e.source_domain for e in mine if e.source_domain)
         n, d = len(mine), len(domains)
-        score = 0.6 * min(1.0, n / _TARGET_EVIDENCE) + 0.4 * min(1.0, d / _TARGET_DOMAINS)
+        quality = float(np.mean([e.quality_score for e in mine])) if mine else 0.0
+        score = (
+            0.48 * min(1.0, n / _TARGET_EVIDENCE)
+            + 0.34 * min(1.0, d / _TARGET_DOMAINS)
+            + 0.18 * quality
+        )
         per.append(
             ObjectiveCoverage(
                 id=obj.id,
@@ -91,6 +97,7 @@ def build_report(
                 evidence_count=n,
                 distinct_domains=d,
                 score=round(score, 3),
+                quality=round(quality, 3),
                 thinnest_terms=[],
             )
         )
@@ -100,8 +107,7 @@ def build_report(
     all_domains = {e.source_domain for e in evidence if e.source_domain}
     diversity = min(1.0, len(all_domains) / max(1, 0.5 * len(evidence))) if evidence else 0.0
 
-    with_prov = sum(1 for e in evidence if e.url and e.publish_date)
-    provenance = with_prov / len(evidence) if evidence else 0.0
+    provenance = float(np.mean([e.quality_score for e in evidence])) if evidence else 0.0
 
     penalty = min(0.25, 0.05 * unresolved_contradictions)
     confidence = max(
@@ -129,9 +135,9 @@ def should_stop(report: CoverageReport, target: float, rounds_done: int, max_rou
     if rounds_done < 1:
         return False, ""
     if report.confidence >= target:
-        return True, f"confidence {report.confidence:.0%} reached target {target:.0%}"
+        return True, f"research completeness {report.confidence:.0%} reached target {target:.0%}"
     if rounds_done >= max_rounds:
-        return True, f"max rounds ({max_rounds}) reached at confidence {report.confidence:.0%}"
+        return True, f"max rounds ({max_rounds}) reached at {report.confidence:.0%} completeness"
     thin = thinnest(report, 1)
     if thin and thin[0].score >= 0.8:
         return True, "every objective is well covered"

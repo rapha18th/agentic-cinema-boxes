@@ -78,7 +78,7 @@ export function ResearchConsole({
       <div className="rc-bars">
         {objT > 0 && !done && <Bar label="OBJECTIVE " value={objN / objT} tone="dim" />}
         <Bar label="COVERAGE  " value={p.coverage ?? 0} tone="amber" />
-        <Bar label="CONFIDENCE" value={p.confidence ?? 0} tone="red" />
+        <Bar label="READINESS " value={p.confidence ?? 0} tone="red" />
       </div>
 
       <div className="rc-count">{p.evidence ?? 0} FRAGMENTS INDEXED</div>

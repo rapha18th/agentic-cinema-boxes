@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ThemeToggle } from "../components/ThemeToggle";
 
 const GoogleMark = () => (
@@ -19,13 +20,21 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
         <div className="landing-monolith" aria-hidden="true" />
         <h1 className="landing-title">THE BOXES</h1>
         <p className="landing-lede">
-          An autonomous research department for filmmakers. Type a premise, walk
-          away, come back to a thousand boxes of cited evidence.
+          Turn a film premise into an evidence-backed production bible. Live sources,
+          department briefs, originality analysis, and unresolved factual risks.
         </p>
-        <button className="gbtn" onClick={onSignIn}>
-          <span className="gbtn-icon"><GoogleMark /></span>
-          Sign in with Google
-        </button>
+        <div className="landing-actions">
+          <Link className="demo-btn" to="/demo">Explore the finished dossier</Link>
+          <button className="gbtn" onClick={onSignIn}>
+            <span className="gbtn-icon"><GoogleMark /></span>
+            Start with Google
+          </button>
+        </div>
+        <div className="landing-proof" aria-label="Example dossier contents">
+          <span><b>42</b> cited fragments</span>
+          <span><b>7</b> departments briefed</span>
+          <span><b>3</b> risks surfaced</span>
+        </div>
       </div>
       <p className="landing-foot">Agentic Cinema hackathon · Parallel track</p>
     </div>

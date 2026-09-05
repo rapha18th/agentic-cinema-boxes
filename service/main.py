@@ -8,8 +8,10 @@ and Cloud Storage.
 from __future__ import annotations
 
 import json
+import io
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -17,24 +19,31 @@ import uuid
 from pathlib import Path
 
 import numpy as np
+from google.genai import types
+from pypdf import PdfReader
+from PIL import Image
 from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from boxes import research_loop as rl  # noqa: E402
+from boxes.workflow import workflow_agent  # noqa: E402
 from boxes import reel as reel_mod  # noqa: E402
 from boxes.depth import get as get_depth  # noqa: E402
 from boxes.embeddings import embed_texts, embed_parts, image_part, TASK_SEARCH  # noqa: E402
 from boxes.evidence import Evidence  # noqa: E402
 from boxes import prior_art as prior_art_mod  # noqa: E402
+from boxes import qa as qa_mod  # noqa: E402
+from boxes import synthesis as synthesis_mod  # noqa: E402
 
 import auth  # noqa: E402
 import report  # noqa: E402
 import store  # noqa: E402
 
 _DEPTHS = {"scout", "production", "kubrick"}
+_MAX_UPLOAD = 12 * 1024 * 1024
+_UPLOAD_TYPES = {"text/plain", "application/pdf", "image/png", "image/jpeg", "image/webp"}
 
 PROJECT_ID = os.environ["GOOGLE_CLOUD_PROJECT"]  # required
 BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", f"{PROJECT_ID}.firebasestorage.app")
@@ -66,6 +75,8 @@ def create_project(body: dict, uid: str = Depends(auth.current_uid)) -> dict:
     depth = body.get("depth", "scout")
     if not premise:
         raise HTTPException(400, "premise required")
+    if depth not in _DEPTHS:
+        raise HTTPException(400, "depth must be scout, production or kubrick")
     pid = uuid.uuid4().hex[:12]
     store.create_project(uid, pid, premise, depth)
     return {"id": pid, "premise": premise, "depth": depth}
@@ -135,7 +146,7 @@ def project_report(pid: str, uid: str = Depends(auth.current_uid)) -> Response:
 # --------------------------------------------------------------------------- #
 # run the loop, stream events
 # --------------------------------------------------------------------------- #
-def _persist_event(uid: str, pid: str, ev: dict) -> None:
+def _persist_event(uid: str, pid: str, ev: dict, run_id: str = "") -> None:
     t = ev.get("type")
     if t == "plan":
         store.upsert_boxes(uid, pid, [{**o, "score": 0.0, "evidence_count": 0} for o in ev["objectives"]])
@@ -164,28 +175,55 @@ def _persist_event(uid: str, pid: str, ev: dict) -> None:
         store.add_evidence_batch(uid, pid, [(it, None) for it in ev["items"]])
     elif t == "progress":
         store.set_project_status(uid, pid, progress={k: v for k, v in ev.items() if k != "type"})
+        if run_id:
+            store.touch_run(uid, pid, run_id)
     elif t == "stop":
         store.set_project_status(uid, pid, status="done", stop_reason=ev["reason"])
 
 
-def _run_stream(uid: str, pid: str, premise: str, depth: str):
+def _run_stream(uid: str, pid: str, premise: str, depth: str, run_id: str):
     q: "queue.Queue[dict | None]" = queue.Queue()
 
     def on_event(ev: dict) -> None:
+        ev["run_id"] = run_id
+        try:
+            _persist_event(uid, pid, ev, run_id)
+        except Exception:  # noqa: BLE001, S110
+            pass
         q.put(ev)
 
     def worker() -> None:
         try:
-            proj = rl.run(premise, depth=depth, on_event=on_event)
+            proj = workflow_agent.execute(premise, depth=depth, on_event=on_event)
             # persist evidence with 768 vectors
+            coords = _semantic_coordinates(proj.vectors)
             items = []
             for i, e in enumerate(proj.evidence):
                 vec = proj.vectors[i].tolist() if proj.vectors is not None else None
-                items.append((e.to_dict(), vec))
-            for k in range(0, len(items), 300):
-                store.add_evidence_batch(uid, pid, items[k : k + 300])
+                doc = e.to_dict()
+                if i < len(coords):
+                    doc["map_x"], doc["map_y"] = coords[i]
+                items.append((doc, vec))
+            # Two writes per item (metadata + private vector), kept below the
+            # Firestore 500-operation batch limit.
+            for k in range(0, len(items), 200):
+                store.add_evidence_batch(uid, pid, items[k : k + 200])
             beats = reel_mod.build_reel(premise, proj.evidence)
             store.set_reel(uid, pid, [b.to_dict() for b in beats])
+            try:
+                narrative = synthesis_mod.build(
+                    premise,
+                    [o.to_dict() for o in proj.objectives],
+                    [e.to_dict() for e in proj.evidence],
+                )
+                if narrative.overview:
+                    store.set_project_status(uid, pid, overview=narrative.overview)
+                for objective in proj.objectives:
+                    summary = narrative.box_summaries.get(objective.id)
+                    if summary:
+                        store.upsert_box(uid, pid, {"id": objective.id, "summary": summary})
+            except Exception:  # noqa: BLE001, S110
+                pass
             q.put({"type": "reel", "beats": [b.to_dict() for b in beats]})
             q.put({"type": "complete", "confidence": proj.confidence,
                    "evidence": len(proj.evidence), "boxes": len(proj.objectives)})
@@ -193,6 +231,7 @@ def _run_stream(uid: str, pid: str, premise: str, depth: str):
             q.put({"type": "error", "error": str(e)})
             store.set_project_status(uid, pid, status="error", error=str(e))
         finally:
+            store.finish_run(uid, pid, run_id)
             q.put(None)
 
     threading.Thread(target=worker, daemon=True).start()
@@ -201,11 +240,28 @@ def _run_stream(uid: str, pid: str, premise: str, depth: str):
         ev = q.get()
         if ev is None:
             break
-        try:
-            _persist_event(uid, pid, ev)
-        except Exception:  # noqa: BLE001, S110
-            pass
         yield f"data: {json.dumps(ev)}\n\n"
+
+
+def _semantic_coordinates(vectors: np.ndarray | None) -> list[tuple[float, float]]:
+    """Project embeddings into a stable two-dimensional evidence space."""
+    if vectors is None or len(vectors) == 0:
+        return []
+    mat = np.asarray(vectors, dtype=np.float32)
+    if len(mat) == 1:
+        return [(0.5, 0.5)]
+    centered = mat - mat.mean(axis=0, keepdims=True)
+    try:
+        u, s, _ = np.linalg.svd(centered, full_matrices=False)
+        xy = u[:, :2] * s[:2]
+    except np.linalg.LinAlgError:
+        return [(0.5, 0.5) for _ in range(len(mat))]
+    if xy.shape[1] == 1:
+        xy = np.column_stack([xy[:, 0], np.zeros(len(xy))])
+    lo, hi = xy.min(axis=0), xy.max(axis=0)
+    scaled = (xy - lo) / np.maximum(hi - lo, 1e-9)
+    scaled = 0.08 + scaled * 0.84
+    return [(round(float(x), 5), round(float(y), 5)) for x, y in scaled]
 
 
 @app.post("/api/projects/{pid}/run")
@@ -213,10 +269,13 @@ def run_project(pid: str, uid: str = Depends(auth.current_uid)) -> StreamingResp
     p = store.get_project(uid, pid)
     if not p:
         raise HTTPException(404, "not found")
+    run_id = uuid.uuid4().hex[:16]
+    if not store.try_start_run(uid, pid, run_id):
+        raise HTTPException(409, "a research run is already active for this project")
     return StreamingResponse(
-        _run_stream(uid, pid, p["premise"], p.get("depth", "scout")),
+        _run_stream(uid, pid, p["premise"], p.get("depth", "scout"), run_id),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "X-Run-Id": run_id},
     )
 
 
@@ -274,10 +333,10 @@ def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
     qv = np.asarray(embed_texts([question], dim=768, prefix=TASK_SEARCH)[0], dtype=np.float32)
     qv /= np.linalg.norm(qv) + 1e-9
     sims = mat @ qv
-    order = np.argsort(-sims)[: int(body.get("k", 6))]
-    return {
-        "matches": [
+    order = np.argsort(-sims)[: min(8, max(3, int(body.get("k", 6))))]
+    matches = [
             {
+                "id": rows[i].get("id", ""),
                 "score": round(float(sims[i]), 3),
                 "text": rows[i]["text"][:800],
                 "citation": _cite(rows[i]),
@@ -287,10 +346,18 @@ def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
                 "media_mime": rows[i].get("media_mime", ""),
                 "modality": rows[i].get("modality", "text"),
                 "source": rows[i].get("source", "parallel"),
+                "source_domain": rows[i].get("source_domain", ""),
+                "title": rows[i].get("title", ""),
+                "publish_date": rows[i].get("publish_date"),
+                "source_tier": rows[i].get("source_tier", "web"),
+                "quality_score": rows[i].get("quality_score", 0.0),
             }
             for i in order
         ]
-    }
+    grounded = qa_mod.answer(question, matches, [m["score"] for m in matches])
+    cited = grounded.pop("cited_indices")
+    sources = [matches[i - 1] for i in cited]
+    return {**grounded, "sources": sources, "matches": matches}
 
 
 def _cite(row: dict) -> str:
@@ -316,23 +383,51 @@ async def add_resource(
     if not store.get_project(uid, pid):
         raise HTTPException(404, "not found")
     data = await file.read()
-    ctype = file.content_type or "application/octet-stream"
-    name = f"{int(time.time())}_{file.filename}"
+    if not data:
+        raise HTTPException(400, "empty upload")
+    if len(data) > _MAX_UPLOAD:
+        raise HTTPException(413, "upload exceeds the 12 MB limit")
+    ctype = (file.content_type or "application/octet-stream").lower().split(";", 1)[0]
+    if ctype not in _UPLOAD_TYPES:
+        raise HTTPException(415, "supported uploads: text, PDF, PNG, JPEG and WebP")
+    if objective_id and objective_id not in {b.get("id") for b in store.list_boxes(uid, pid)}:
+        raise HTTPException(400, "unknown research box")
+    original = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(file.filename or "reference").name)[:120]
+    name = f"{int(time.time())}_{original or 'reference'}"
+
+    if ctype == "application/pdf" and not data.startswith(b"%PDF-"):
+        raise HTTPException(400, "file does not appear to be a PDF")
+    if ctype.startswith("image/"):
+        try:
+            im = Image.open(io.BytesIO(data))
+            im.verify()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(400, "file does not appear to be a valid image") from exc
     path = store.put_file(uid, pid, name, data, ctype)
 
     if ctype.startswith("image/"):
         vec = embed_parts([image_part(data, ctype)], dim=768)
         text = note or f"[director image] {file.filename}"
         modality = "image"
+    elif ctype == "application/pdf":
+        vec = embed_parts([types.Part.from_bytes(data=data, mime_type=ctype)], dim=768)
+        try:
+            reader = PdfReader(io.BytesIO(data))
+            extracted = "\n".join((page.extract_text() or "") for page in reader.pages[:20])
+        except Exception:  # noqa: BLE001
+            extracted = ""
+        text = (note + "\n\n" + extracted).strip()[:8000] or f"[director PDF] {file.filename}"
+        modality = "pdf"
     else:
-        text = (note + "\n\n" + data.decode("utf-8", "ignore"))[:4000].strip()
+        text = (note + "\n\n" + data.decode("utf-8", "replace"))[:8000].strip()
         vec = embed_texts([text], dim=768)[0]
-        modality = "pdf" if ctype == "application/pdf" else "text"
+        modality = "text"
 
     ev = Evidence(
         text=text, url="", title=file.filename or "director upload",
         source_domain="director", modality=modality, objective_id=objective_id,
         query="director upload", relevance_reason=note, license_note="director-provided",
+        source_tier="director", quality_score=0.85,
     )
     d = ev.to_dict()
     d["source"] = "director"
