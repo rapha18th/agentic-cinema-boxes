@@ -13,18 +13,21 @@ export const TAB_IDS: TabId[] = ["overview", "departments", "evidence", "trace",
 const cite = (e: Evidence) =>
   [e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ");
 
-/** Scraped text arrives with nav chrome, wiki syntax, and menu dumps. Strip the
- *  worst of it so a card preview reads as prose. */
+/** External text (scraped pages, TMDB synopses) arrives with nav chrome, wiki
+ *  syntax, and em dashes the house style avoids. Normalise it for display. */
+export function tidy(text?: string): string {
+  return (text || "").replace(/\s*[—–]\s*/g, ", ").replace(/\s+/g, " ").trim();
+}
 export function cleanText(text?: string, max = 240): string {
-  const clean = (text || "")
-    .replace(/^\s*[|#>*-]+\s*/, "")
-    .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\{\{[^}]*\}\}/g, "")
-    .replace(/[`*_#>]+/g, "")
-    .replace(/\s*(Home|Menu|Search|Close|Skip to content|Log ?in|Sign ?in)\s*[·|]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const clean = tidy(
+    (text || "")
+      .replace(/^\s*[|#>*-]+\s*/, "")
+      .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\{\{[^}]*\}\}/g, "")
+      .replace(/[`*_#>]+/g, "")
+      .replace(/\s*(Home|Menu|Search|Close|Skip to content|Log ?in|Sign ?in)\s*[·|]+/gi, " "),
+  );
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean;
 }
 const presentDepts = (boxes: ResearchBox[]) =>
@@ -405,7 +408,7 @@ export function PriorArtTab({
                 <div className="neighbor-title">{n.title} <span className="muted">{n.year}</span></div>
                 {n.overview && (
                   <p className="neighbor-overview">
-                    {n.overview.length > 160 ? `${n.overview.slice(0, 160)}…` : n.overview}
+                    {tidy(n.overview).length > 160 ? `${tidy(n.overview).slice(0, 160)}…` : tidy(n.overview)}
                   </p>
                 )}
                 <div className="muted">similarity {pctOf(n.similarity)}</div>
