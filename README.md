@@ -66,8 +66,9 @@ objective is well covered, or the round budget runs out.
 
 ## Prior art
 
-On request, THE BOXES surveys existing films for a similar premise: TMDB
-supplies the candidate pool (IMDb has no official API), one Parallel Search
+On request, THE BOXES surveys existing films for a similar premise. TMDB
+supplies the candidate pool through its free developer API; IMDb licenses
+its data as an enterprise product on AWS Data Exchange. One Parallel Search
 pass broadens past TMDB's own tagging, and Gemini Embedding 2 ranks every
 candidate against the premise by meaning, so a heist "without entering the
 vault" finds its real neighbours whatever genre tag it carries. Gemini then
