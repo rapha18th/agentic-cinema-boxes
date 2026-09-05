@@ -1,7 +1,8 @@
 """Prior-art survey: where this premise sits against films that already exist.
 
-TMDB supplies the candidate pool and metadata (not IMDb, which has no official
-API). Parallel Search adds one broadening pass past TMDB's keyword tagging, so
+TMDB supplies the candidate pool and metadata through its free developer API.
+IMDb licenses its data as an enterprise product on AWS Data Exchange. Parallel
+Search adds one broadening pass past TMDB's keyword tagging, so
 festival and foreign titles TMDB under-tags aren't missed. Gemini Embedding 2
 ranks candidates by meaning, not genre tags, so "a heist without entering the
 vault" surfaces its real neighbours regardless of tone. Gemini then reads the
