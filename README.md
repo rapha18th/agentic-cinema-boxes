@@ -32,11 +32,10 @@ a reference reel cut from the strongest material.
 ## How the loop works
 
 The agent runs on Cloud Run behind Google's Agent Development Kit. The loop's
-control flow is plain, concurrent Python, not a fixed pipeline: objectives
-research in parallel, contradiction checks and embeddings verify concurrently,
-and ADK exposes the whole thing as a conversational tool surface
-(`plan_research`, `run_research`, `query_index`, ...). Every step streams to
-the browser as it happens.
+control flow is plain, concurrent Python. Objectives research in parallel,
+contradiction checks and embeddings verify concurrently, and ADK exposes the
+whole thing as a conversational tool surface (`plan_research`, `run_research`,
+`query_index`, ...). Every step streams to the browser as it happens.
 
 1. **PLAN.** Gemini 3.8 Flash writes a research ontology from the premise: a list
    of objectives, one per box, each tagged with the production departments it
@@ -70,11 +69,11 @@ objective is well covered, or the round budget runs out.
 On request, THE BOXES surveys existing films for a similar premise: TMDB
 supplies the candidate pool (IMDb has no official API), one Parallel Search
 pass broadens past TMDB's own tagging, and Gemini Embedding 2 ranks every
-candidate against the premise by meaning, not genre, so a heist "without
-entering the vault" finds its real neighbours regardless of tone. Gemini then
+candidate against the premise by meaning, so a heist "without entering the
+vault" finds its real neighbours whatever genre tag it carries. Gemini then
 reads the closest films and states which angles none of them take, always
 naming which titles that claim was checked against. Originality is claimed
-only relative to the surveyed set, never absolutely.
+only relative to the surveyed set.
 
 ## The multimodal space
 
@@ -181,8 +180,9 @@ gcloud auth application-default set-quota-project YOUR_GCP_PROJECT
 Gemini 3.x and Gemini Embedding 2 are served on the Vertex `global` location, so
 `GOOGLE_CLOUD_LOCATION=global`. The Parallel key goes in `.env` as
 `PARALLEL_API_KEY`, or in Secret Manager under the same name. `TMDB_API_KEY`
-(the v3 API key, not the v4 read access token) is optional. Without it,
-prior art still runs on Parallel Search alone, with a thinner pool.
+is optional and takes TMDB's v3 API key; the longer v4 read access token will
+not authenticate. Without it, prior art still runs on Parallel Search alone,
+with a thinner pool.
 
 ```bash
 python scripts/probe_access.py           # confirm model access
