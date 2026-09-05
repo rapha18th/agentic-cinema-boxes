@@ -39,11 +39,13 @@ function Bar({ label, value, tone = "amber" }: { label: string; value: number; t
 }
 
 export function ResearchConsole({
-  progress, log, done,
+  progress, log, done, disconnected, errorText,
 }: {
   progress: Progress;
   log: string[];
   done: boolean;
+  disconnected?: boolean;
+  errorText?: string;
 }) {
   const p = progress;
   const phase = PHASE_LABEL[p.phase ?? ""] ?? (p.phase ?? "STANDING BY").toUpperCase();
@@ -80,6 +82,14 @@ export function ResearchConsole({
       </div>
 
       <div className="rc-count">{p.evidence ?? 0} FRAGMENTS INDEXED</div>
+
+      {errorText
+        ? <div className="rc-note rc-err">RUN ENDED WITH AN ERROR — {errorText}</div>
+        : disconnected && !done
+          ? <div className="rc-note rc-warn">
+              LIVE FEED LOST · THE RUN CONTINUES ON THE SERVER · THIS PAGE KEEPS UPDATING FROM SAVED DATA
+            </div>
+          : null}
 
       <div className="rc-log">
         {log.slice(-9).map((l, i) => <div key={i}>{l}</div>)}

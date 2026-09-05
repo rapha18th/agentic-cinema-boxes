@@ -371,9 +371,53 @@ button.box.on { border-color: var(--accent); }
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
+/* ── rendered markdown (modals, answers, summaries) ───────────────── */
+.md { font-size: 14px; line-height: 1.7; color: var(--text); }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 .7em; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 1em 0 .4em; line-height: 1.3; font-weight: 600;
+  text-transform: none; letter-spacing: normal; color: var(--text); }
+.md h1 { font-size: 1.2em; }
+.md h2 { font-size: 1.12em; }
+.md h3 { font-size: 1.04em; }
+.md h4, .md h5, .md h6 { font-size: 1em; color: var(--muted); }
+.md ul, .md ol { margin: .4em 0 .8em; padding-left: 1.4em; }
+.md li { margin: .2em 0; }
+.md li > p { margin: .2em 0; }
+.md a { color: var(--link); }
+.md code { font: .88em var(--mono); background: color-mix(in srgb, var(--muted) 16%, transparent);
+  padding: .1em .38em; border-radius: 3px; }
+.md pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px;
+  padding: 12px 14px; overflow-x: auto; margin: .6em 0; }
+.md pre code { background: none; padding: 0; font-size: .86em; }
+.md blockquote { margin: .6em 0; padding-left: .9em; border-left: 2px solid var(--line-strong);
+  color: var(--muted); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+.md table { border-collapse: collapse; font-size: .92em; margin: .6em 0; display: block;
+  overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+.md img { max-width: 100%; border-radius: 4px; }
+.md.modal-text { white-space: normal; margin: 12px 0; }
+.answer .md { font-size: 13px; }
+
 /* ── research map ─────────────────────────────────────────────────── */
+.map-wrap { position: relative; }
 .map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 4px;
-  background: var(--map-bg); cursor: default; }
+  background: var(--map-bg); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.map.grabbing { cursor: grabbing; }
+.map-controls { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 2; }
+.map-btn { width: 28px; height: 28px; padding: 0; border-radius: 4px;
+  border: 1px solid var(--map-grid); background: color-mix(in srgb, var(--map-bg) 78%, transparent);
+  color: var(--map-ink); font: 15px/1 var(--sans); cursor: pointer; display: grid; place-items: center; }
+.map-btn:hover { background: var(--map-bg); border-color: var(--map-tip-line);
+  filter: none; transform: none; color: var(--map-accent); }
+.map-fullscreen { position: fixed; inset: 0; z-index: 1200; background: var(--map-edge);
+  display: flex; flex-direction: column; gap: 12px; padding: 20px; animation: modal-fade .15s ease both; }
+.map-fullscreen .map-wrap-fs { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.map-fullscreen svg.map { width: 100%; height: 100%; }
+.map-fs-close { align-self: flex-end; }
 .maptip { position: absolute; transform: translate(-50%, -140%); background: var(--map-tip-bg);
   color: #e7e9f0; border: 1px solid var(--map-tip-line); padding: 3px 7px; border-radius: 4px;
   font: 11px var(--mono); pointer-events: none; max-width: 240px; white-space: nowrap;
@@ -408,6 +452,12 @@ button.box.on { border-color: var(--accent); }
 .rc-log { max-width: 640px; margin: 0 auto; font-size: 11px; line-height: 1.7; opacity: .7;
   max-height: 170px; overflow: auto; border-top: 1px solid var(--device-line); padding-top: 8px; }
 .rc-log > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-note { max-width: 640px; margin: 12px auto 2px; font-size: 11px; line-height: 1.6;
+  text-align: center; letter-spacing: .08em; padding: 7px 12px; border-radius: 4px; }
+.rc-warn { color: var(--device-amber);
+  border: 1px dashed color-mix(in srgb, var(--device-amber) 45%, transparent); }
+.rc-err { color: var(--device-red);
+  border: 1px solid color-mix(in srgb, var(--device-red) 50%, transparent); }
 
 /* ── landing: minimalist, Kubrick one-point perspective ─────────────── */
 .landing { position: fixed; inset: 0; background: var(--landing-bg); color: var(--landing-ink);

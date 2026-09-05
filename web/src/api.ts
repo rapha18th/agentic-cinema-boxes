@@ -83,7 +83,17 @@ export async function uploadResource(pid: string, file: File, objectiveId: strin
   return r.json();
 }
 
-/** Stream the research loop's server-sent events. */
+const TERMINAL = new Set(["complete", "stop", "error"]);
+
+/** Stream the research loop's server-sent events.
+ *
+ *  The run can outlive its HTTP connection: a Kubrick pass takes many minutes
+ *  and an intermediary (Firebase Hosting's rewrite, in particular) will cut the
+ *  stream well before the loop finishes. The loop keeps running on the server
+ *  and keeps writing to Firestore, so when the stream ends without a terminal
+ *  event we emit a synthetic `disconnect` and let the caller fall back to the
+ *  project's live document. Point `VITE_API_BASE` straight at Cloud Run to
+ *  avoid the cut entirely. */
 export async function runProject(
   pid: string,
   onEvent: (ev: any) => void,
@@ -99,17 +109,28 @@ export async function runProject(
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop() ?? "";
-    for (const p of parts) {
-      const line = p.trim();
-      if (line.startsWith("data:")) {
-        try { onEvent(JSON.parse(line.slice(5).trim())); } catch { /* ignore */ }
+  let sawTerminal = false;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() ?? "";
+      for (const p of parts) {
+        const line = p.trim();
+        if (!line.startsWith("data:")) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (TERMINAL.has(ev.type)) sawTerminal = true;
+          onEvent(ev);
+        } catch { /* ignore a partial frame */ }
       }
     }
+  } catch (e: any) {
+    if (signal?.aborted) return;
+    onEvent({ type: "disconnect", reason: String(e?.message || e) });
+    return;
   }
+  if (!sawTerminal) onEvent({ type: "disconnect", reason: "stream ended early" });
 }
