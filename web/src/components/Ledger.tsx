@@ -34,7 +34,8 @@ interface Ev {
 const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`;
 
 function cite(e: Ev) {
-  return [e.title || e.source_domain || e.url, e.publish_date].filter(Boolean).join(" · ");
+  return [e.title || e.source_domain || e.url, e.publish_date]
+    .filter(Boolean).join(" · ").replace(/\s*[—–]\s*/g, ", ");
 }
 
 /** Strip the markdown/wiki syntax that leaks through raw scraped text so a

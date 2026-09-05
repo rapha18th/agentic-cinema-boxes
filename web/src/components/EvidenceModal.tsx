@@ -10,9 +10,10 @@ export function isInteractiveClick(ev: { target: EventTarget | null }): boolean 
 }
 
 function citationLabel(e: any): string {
-  return e.citation || e.cite
+  const raw = e.citation || e.cite
     || [e.title || e.source_domain, e.publish_date].filter(Boolean).join(" · ")
     || e.url || "Evidence";
+  return String(raw).replace(/\s*[—–]\s*/g, ", ");
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
