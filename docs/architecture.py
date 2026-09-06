@@ -83,13 +83,13 @@ tile(5.05, 7.85, "Firebase Hosting", "static app · /api", color=YELLOW, r=0.42)
 tile(5.05, 4.5, "Cloud Run", "boxes-api · FastAPI", color=BLUE, r=0.5)
 
 # top strip: external APIs + Vertex AI
-cluster(6.7, 6.95, 4.9, 1.9, "Parallel + TMDB  ·  external APIs", ec=PURPLE, tc="#5B3FCF")
-tile(7.7, 7.95, "Search API", "web", color=PURPLE, r=0.32)
-tile(9.1, 7.95, "Extract API", "full text", color=PURPLE, r=0.32)
-tile(10.6, 7.95, "TMDB", "movie prior art", color=PURPLE, r=0.32)
-cluster(12.1, 6.95, 4.15, 1.9, "Vertex AI  ·  global")
-tile(13.2, 7.95, "Gemini 3.8 Flash", "planning · verdicts\ngrounded answers", color=BLUE, r=0.36)
-tile(15.15, 7.95, "Gemini Embedding 2", "one multimodal space", color=BLUE, r=0.36)
+cluster(6.7, 6.75, 4.9, 2.1, "Parallel + TMDB  ·  external APIs", ec=PURPLE, tc="#5B3FCF")
+tile(7.7, 8.0, "Search API", "web", color=PURPLE, r=0.32)
+tile(9.1, 8.0, "Extract API", "full text", color=PURPLE, r=0.32)
+tile(10.6, 8.0, "TMDB", "movie prior art", color=PURPLE, r=0.32)
+cluster(12.1, 6.75, 4.15, 2.1, "Vertex AI  ·  global")
+tile(13.2, 8.0, "Gemini 3.8 Flash", "planning · verdicts\ngrounded answers", color=BLUE, r=0.36)
+tile(15.15, 8.0, "Gemini Embedding 2", "one multimodal space", color=BLUE, r=0.36)
 
 # -- the loop -----------------------------------------------------
 cluster(6.7, 1.65, 9.6, 4.15, "")
@@ -128,15 +128,23 @@ ax.text(mid, 2.07, "Per-objective research, embedding, and contradiction checks 
 ax.text(mid, 1.85, "Thread-local model clients; a semaphore caps in-flight model calls at three.",
         fontsize=7.0, color=SUB, ha="center", va="center", zorder=10)
 
-# loop <-> external APIs, one channel left of the clusters
-wire([(cxs[1], ly + R), (cxs[1], 4.72), (6.4, 4.72), (6.4, 7.95), (7.7 - 0.32, 7.95)],
-     color=PURPLE, tcol="#5B3FCF", text="objectives + queries  ⇄  text & media", tp=(7.35, 6.35))
+# a collector bar along the top of the loop: every step draws on the services
+BUS_Y = ly + R + 0.22
+for cx in cxs:
+    ax.plot([cx, cx], [ly + R, BUS_Y], color="#B7BBC2", lw=1.1, zorder=4,
+            solid_capstyle="round")
+ax.plot([cxs[0], cxs[-1]], [BUS_Y, BUS_Y], color="#B7BBC2", lw=1.4, zorder=4,
+        solid_capstyle="round")
 
-# loop -> Vertex AI, through the in-flight gate
-wire([(cxs[2], ly + R), (cxs[2], 4.72), (12.4, 4.72), (12.4, 7.95), (12.84, 7.95)], color=BLUE)
-ax.add_patch(FancyBboxPatch((10.86, 4.5), 1.3, 0.44, boxstyle="round,pad=0.02,rounding_size=0.08",
+# the whole loop <-> Parallel + TMDB, risen from the collector clear of the title
+wire([(cxs[1], BUS_Y), (cxs[1], 5.02), (6.85, 5.02), (6.85, 6.45), (7.7, 6.45), (7.7, 6.78)],
+     color=PURPLE, tcol="#5B3FCF", text="objectives + queries  ⇄  text & media", tp=(9.7, 6.05))
+
+# the whole loop -> Vertex AI, metered by the in-flight gate
+wire([(cxs[4], BUS_Y), (cxs[4], 5.02), (14.2, 5.02), (14.2, 6.78)], color=BLUE)
+ax.add_patch(FancyBboxPatch((13.55, 6.05), 1.3, 0.44, boxstyle="round,pad=0.02,rounding_size=0.08",
                             fc="white", ec=BLUE, lw=1.3, zorder=9))
-ax.text(11.51, 4.72, "gate · 3 in-flight", fontsize=6.7, color=BLUE, weight="bold",
+ax.text(14.2, 6.27, "gate · 3 in-flight", fontsize=6.7, color=BLUE, weight="bold",
         ha="center", va="center", zorder=10)
 
 # right column: Data
@@ -150,8 +158,8 @@ wire([(2.6, 6.85), (3.55, 6.85), (3.55, 4.9), (4.58, 4.8)], text="REST + ID toke
 wire([(4.58, 4.4), (4.0, 4.4), (4.0, 6.25), (2.6, 6.25)],
      color=BLUE, tcol=BLUE, text="SSE stream", tp=(3.55, 4.78))
 
-# Cloud Run -> Data (bottom rail; enters the Data tiles on the left, clear of labels)
-wire([(5.05, 4.0), (5.05, 1.25), (17.15, 1.25), (17.15, 3.3), (18.05, 3.3)],
+# Cloud Run -> Data (exits the tile's right edge, clear of its label, then the bottom rail)
+wire([(5.4, 4.2), (6.05, 4.2), (6.05, 1.25), (17.15, 1.25), (17.15, 3.3), (18.05, 3.3)],
      color=GREEN, tcol="#1E7B34", text="persist live: evidence · progress · files", tp=(10.6, 1.05))
 wire([(17.7, 3.5), (17.15, 3.5), (17.15, 6.6), (18.05, 6.6)], color=GREEN, lw=2.0)
 
