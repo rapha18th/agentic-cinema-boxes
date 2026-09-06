@@ -47,6 +47,13 @@ export function conflictMap(verdicts: Verdict[]): Record<string, Verdict> {
 export const conflictIdSet = (verdicts: Verdict[]) =>
   new Set(verdicts.flatMap((v) => [v.a_id, v.b_id].filter(Boolean) as string[]));
 
+/** The verdict relation is stored as a verb ("contradicts"). Show it as a
+ *  noun so a single card reads as a label, not a sentence fragment. */
+export const relationLabel = (relation?: string) =>
+  relation === "contradicts" ? "contradiction"
+    : relation === "contextualises" ? "context"
+    : relation || "";
+
 /* ── evidence cards, multimodal ────────────────────────────────────── */
 export function EvidenceCards({
   items, onOpen, limit, conflicts,
@@ -114,11 +121,11 @@ export function OverviewTab({
       <section className="brief-lead">
         <div>
           <p className="eyebrow">The research picture</p>
-          <h2 className="display-heading">
+          <p className="brief-overview">
             {overview || (boxes.length
               ? "The archive is ready to turn evidence into production decisions."
               : "Start a research run to build the world behind this premise.")}
-          </h2>
+          </p>
         </div>
         <aside className="decision-card">
           <span className="signal">Next decision</span>
@@ -310,7 +317,7 @@ export function deriveTimeline(
       steps.push({ label: "Opened a box", detail: `${nb}, a signal that kept recurring across the evidence`, kind: "new" }));
   });
   verdicts.forEach((v) =>
-    steps.push({ label: `Cross-examined · ${v.relation}`, detail: `${v.a_cite}  vs  ${v.b_cite}` }));
+    steps.push({ label: `Cross-examined · ${relationLabel(v.relation)}`, detail: `${v.a_cite}  vs  ${v.b_cite}` }));
   if (stopReason) steps.push({ label: "Stopped", detail: stopReason, kind: "done" });
   return steps;
 }
@@ -354,7 +361,7 @@ export function TraceTab({
         <p className="eyebrow">Cross-examined sources</p>
         {verdicts.map((v, i) => (
           <div className={`verdict ${v.relation}`} key={v.id || i}>
-            <b>{v.relation}</b> · {v.explanation}
+            <b>{relationLabel(v.relation)}</b> · {v.explanation}
             <div className="muted">A: {v.a_cite}</div>
             <div className="muted">B: {v.b_cite}</div>
           </div>
@@ -399,6 +406,20 @@ export function PriorArtTab({
 
       {has && (
         <>
+          {!!priorArt.unclaimed_angles?.length && (
+            <div className="angle-stack">
+              {priorArt.unclaimed_angles.map((a: any, i: number) => (
+                <div className="verdict angle" key={i}>
+                  <b>{a.angle}</b>
+                  {a.why && <p>{a.why}</p>}
+                  {!!a.contrast_titles?.length && (
+                    <div className="muted">checked against: {a.contrast_titles.join(", ")}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="eyebrow prior-art-films">Films with a nearby premise</p>
           <div className="neighborgrid">
             {priorArt.neighbors.map((n: any, i: number) => (
               <a className="neighbor" key={i} href={n.url} target="_blank" rel="noopener">
@@ -415,15 +436,6 @@ export function PriorArtTab({
               </a>
             ))}
           </div>
-          {(priorArt.unclaimed_angles || []).map((a: any, i: number) => (
-            <div className="verdict angle" key={i}>
-              <b>{a.angle}</b>
-              {a.why && <p>{a.why}</p>}
-              {!!a.contrast_titles?.length && (
-                <div className="muted">checked against: {a.contrast_titles.join(", ")}</div>
-              )}
-            </div>
-          ))}
         </>
       )}
     </section>

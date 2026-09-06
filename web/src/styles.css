@@ -255,6 +255,10 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .neighbor-title { font-size: 12px; line-height: 1.4; }
 .neighbor-tags { font-size: 11px; line-height: 1.5; }
 .verdict.angle { border-left-color: var(--accent); }
+.angle-stack { display: grid; gap: 8px; margin-top: 8px; }
+.angle-stack .verdict.angle b { text-transform: none; letter-spacing: 0; font-size: 13px;
+  line-height: 1.5; }
+.eyebrow.prior-art-films { margin-top: 22px; }
 
 /* action row + danger zone */
 .action-row { flex-wrap: wrap; }
@@ -302,6 +306,8 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .brief-lead { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .75fr);
   gap: 48px; align-items: center; padding: 32px 4px 24px; }
 .brief-lead > div > p:last-child { max-width: 72ch; color: var(--muted); font-size: 15px; }
+.brief-lead > div > p.brief-overview { margin: 10px 0 0; max-width: 68ch;
+  color: var(--text); font: 350 17px/1.6 var(--sans); }
 .decision-card { padding: 20px; background: var(--surface); border: 1px solid var(--line);
   border-left: 2px solid var(--accent); border-radius: 3px; box-shadow: var(--shadow); }
 .decision-card .signal { display: block; margin-bottom: 12px; color: var(--accent);

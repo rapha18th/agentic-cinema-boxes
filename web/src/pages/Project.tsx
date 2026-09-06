@@ -9,7 +9,7 @@ import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVe
 import { ask, deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource } from "../api";
 import {
   DepartmentsTab, EvidenceTab, OverviewTab, PriorArtTab, TAB_IDS, TraceTab,
-  conflictMap, pctOf, type TabId,
+  conflictMap, pctOf, relationLabel, type TabId,
 } from "../workspace/tabs";
 import type { AskResponse, DepthName, Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
 
@@ -77,7 +77,7 @@ export function Project() {
         else if (ev.type === "extract") push(`EXTRACT ${ev.objective} · ${ev.sources} sources · ${ev.rejected ?? 0} rejected`);
         else if (ev.type === "coverage") push(`MEASURE ${ev.summary}`);
         else if (ev.type === "emergent_gap") push(`DECIDE  opened ${ev.objective.name} · a recurring cross-box signal`);
-        else if (ev.type === "contradiction") push(`VERIFY  ${ev.verdict.relation} · ${ev.verdict.a_cite} vs ${ev.verdict.b_cite}`);
+        else if (ev.type === "contradiction") push(`VERIFY  ${relationLabel(ev.verdict.relation)} · ${ev.verdict.a_cite} vs ${ev.verdict.b_cite}`);
         else if (ev.type === "stop") push(`STOP    ${ev.reason}`);
         else if (ev.type === "complete") { push(`DONE    ${ev.evidence} fragments · ${pctOf(ev.confidence)}`); setProgress((p) => ({ ...p, phase: "done" })); setTab("overview"); }
         else if (ev.type === "error") push(`ERROR   ${ev.error}`);

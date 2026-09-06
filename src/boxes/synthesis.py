@@ -40,8 +40,9 @@ RESEARCH, box by box, each with a sample of its evidence (citation: snippet):
 
 Return JSON:
 {{"overview": "3 to 5 sentences. What world did the research turn up. What \
-this film's angle is within it. If prior art context is given above, name \
-in one sentence where this premise sits relative to it.",
+this film's angle is within that world. Stay on the world and the story. \
+Do not compare this premise to other films. Prior art belongs in its own \
+section.",
  "boxes": {{"<box id>": "3 to 5 sentences synthesizing that box's evidence \
 into plain prose a filmmaker can act on. Ground every claim in the \
 evidence given. Do not invent details the evidence does not support."}}}}"""
