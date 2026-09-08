@@ -132,7 +132,51 @@ def run(premise: str, *, depth: str | Depth = "scout", on_event: EventFn = _noop
         _do_round(proj, targets, run_no=rounds_done, on_event=on_event,
                   emergent=emergent, progress=progress)
 
+    if d.name != "scout":
+        _probe_disputes(proj, on_event=on_event, progress=progress)
+
     return proj
+
+
+def _probe_disputes(proj: ResearchProject, *, on_event: EventFn, progress) -> None:
+    """After the sweep, chase the questions this subject is actually argued
+    about. A general research pass returns context; a contested history needs
+    the competing conclusions retrieved and put side by side before the
+    verifier can call a contradiction."""
+    try:
+        questions = ontology.disputed_questions(proj.premise, k=3)
+    except Exception:  # noqa: BLE001
+        return
+    if not questions:
+        return
+    progress("cross-examining", round=len(proj.ledger.rounds))
+    rn = len(proj.ledger.rounds) + 1
+    for q in questions:
+        try:
+            found = ps.research(
+                q, [q], objective_id="disputes", extract_urls=3,
+                full_content=True, round_no=rn, media_key="",
+            )
+        except Exception:  # noqa: BLE001
+            continue
+        proj._add_evidence(found)
+
+    max_checks = {"production": 30}.get(proj.depth.name, 50)
+    verdicts = contradiction.find_contradictions(
+        proj.evidence, proj.vectors, max_checks=max_checks
+    )
+    for v in verdicts:
+        if all((v.a_id, v.b_id) != (x.a_id, x.b_id) for x in proj.contradictions):
+            proj.contradictions.append(v)
+            on_event({"type": "contradiction", "verdict": v.to_dict()})
+
+    open_conflicts = sum(1 for v in proj.contradictions if v.relation == "contradicts")
+    rep = coverage.build_report(
+        proj.objectives, proj.evidence, proj.vectors,
+        unresolved_contradictions=open_conflicts,
+    )
+    proj.reports.append(rep)
+    on_event({"type": "coverage", "report": rep.to_dict(), "summary": rep.summary()})
 
 
 def _do_round(
@@ -218,14 +262,14 @@ def _do_round(
 
     # --- contradictions: candidates by embedding, verdicts by Gemini --- #
     progress("verifying", round=run_no)
-    max_checks = 8 if proj.depth.name == "scout" else 18
+    max_checks = {"scout": 10, "production": 26}.get(proj.depth.name, 44)
     new_verdicts = contradiction.find_contradictions(proj.evidence, proj.vectors, max_checks=max_checks)
     for v in new_verdicts:
         if all((v.a_id, v.b_id) != (x.a_id, x.b_id) for x in proj.contradictions):
             proj.contradictions.append(v)
             if v.relation == "contradicts":
                 rec.conflicts.append(f"{v.a_cite}  vs  {v.b_cite}")
-                on_event({"type": "contradiction", "verdict": v.to_dict()})
+            on_event({"type": "contradiction", "verdict": v.to_dict()})
 
     # Only genuine contradictions count against research completeness. "contextualises"
     # verdicts are reconciled differences and do not.

@@ -54,6 +54,12 @@ export const relationLabel = (relation?: string) =>
     : relation === "contextualises" ? "context"
     : relation || "";
 
+/** Real contradictions first, then softer "context" notes, each by similarity. */
+export const rankVerdicts = (vs: Verdict[]) =>
+  [...vs].sort((a, b) =>
+    (a.relation === "contradicts" ? 0 : 1) - (b.relation === "contradicts" ? 0 : 1)
+    || (b.similarity ?? 0) - (a.similarity ?? 0));
+
 /* ── evidence cards, multimodal ────────────────────────────────────── */
 export function EvidenceCards({
   items, onOpen, limit, conflicts,
@@ -168,7 +174,7 @@ export function OverviewTab({
               <h2 className="display-heading small">Where the record disagrees</h2></div>
             {onGoto && <button className="ghost" onClick={() => onGoto("trace")}>Full trace →</button>}
           </div>
-          {verdicts.slice(0, 4).map((v, i) => (
+          {rankVerdicts(verdicts).slice(0, 4).map((v, i) => (
             <div className={`verdict ${v.relation}`} key={v.id || i}>
               <b>{relationLabel(v.relation)}</b> · {cleanText(v.explanation, 200)}
               <div className="muted">{tidy(v.a_cite)}  vs  {tidy(v.b_cite)}</div>
@@ -376,7 +382,7 @@ export function TraceTab({
       </section>
       <section className="card">
         <p className="eyebrow">Cross-examined sources</p>
-        {verdicts.map((v, i) => (
+        {rankVerdicts(verdicts).map((v, i) => (
           <div className={`verdict ${v.relation}`} key={v.id || i}>
             <b>{relationLabel(v.relation)}</b> · {v.explanation}
             <div className="muted">A: {v.a_cite}</div>

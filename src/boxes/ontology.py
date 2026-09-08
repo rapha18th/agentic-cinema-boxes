@@ -108,6 +108,30 @@ def objective_queries_batch(
     return out
 
 
+_DISPUTES_PROMPT = """A film in development:
+{premise}
+
+Name up to {k} factual questions about this real subject where credible sources
+genuinely disagree: contested causes, disputed perpetrators, conflicting
+timelines, numbers argued over, official accounts challenged by later evidence.
+Each question must be answerable by searching, and specific enough that two
+sources could give incompatible answers. If the subject is not contested,
+return fewer, or an empty list.
+
+Return JSON: {{"questions": ["one plain question", "..."]}}"""
+
+
+def disputed_questions(premise: str, *, k: int = 3) -> list[str]:
+    """The questions this subject is actually argued about. General research
+    pulls context; these pull the competing conclusions so they can be put
+    side by side."""
+    raw = llm.generate_json(_DISPUTES_PROMPT.format(premise=premise, k=k))
+    if not isinstance(raw, dict):
+        return []
+    qs = [str(q).strip() for q in (raw.get("questions") or []) if str(q).strip()]
+    return qs[:k]
+
+
 _EMERGENT_PROMPT = """Film premise:
 {premise}
 
