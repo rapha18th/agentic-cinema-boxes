@@ -60,7 +60,6 @@ export function Demo() {
       <header>
         <Link to="/" className="ghost">← THE BOXES</Link>
         <div className="head-actions">
-          <span className="judge-pill">Read-only demo · one real {S.depth} run</span>
           <ThemeToggle />
         </div>
       </header>

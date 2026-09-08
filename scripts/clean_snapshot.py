@@ -110,7 +110,11 @@ def main() -> None:
     fields += [(f"box[{b['name']}].summary", b.get("summary", "")) for b in d["boxes"]]
     fields += [(f"box[{b['name']}].{k}", b.get(k, "")) for b in d["boxes"] for k in ("description", "rationale")]
     fields += [(f"reel[{i}].note", x.get("note", "")) for i, x in enumerate(d.get("reel", []))]
-    fields += [(f"angle[{i}].why", x.get("why", "")) for i, x in enumerate(d.get("prior_art", {}).get("unclaimed_angles", []))]
+    fields += [
+        (f"angle[{i}].{k}", x.get(k, ""))
+        for i, x in enumerate(d.get("prior_art", {}).get("unclaimed_angles", []))
+        for k in ("angle", "why")
+    ]
     fields += [(f"verdict[{i}].explanation", v.get("explanation", "")) for i, v in enumerate(d["verdicts"])]
     for name, text in fields:
         if _ANTITHESIS.search(text or ""):

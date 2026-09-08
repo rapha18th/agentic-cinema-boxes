@@ -177,9 +177,11 @@ POV, tone, or ending none of these films use. Every claim about what "hasn't
 been done" must name which of the listed films it was checked against, and
 must not claim absolute originality, only originality relative to this list.
 
-Write "why" in plain, spare, declarative sentences. State each film's stance
-on its own, plainly. Never write a contrastive sentence joining two films
-with "while", "whereas", or "unlike".
+Write every string you return ("angle", "why", "prompt", every phrase) in
+plain, spare, declarative sentences. State each film's stance on its own,
+plainly. Never use an em dash. Never use a contrastive construction:
+no "while", "whereas", "unlike", "rather than", "instead of", "as opposed
+to", "not X but Y", "X, not Y".
 
 Return JSON: {{"films": [{{"title", "engine" (what is exploited and whether
 it is a flaw or a shipped feature, one phrase), "pov" (perpetrator, bystander,

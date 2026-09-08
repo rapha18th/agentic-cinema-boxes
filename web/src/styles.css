@@ -490,7 +490,7 @@ button.evcard { width: 100%; text-align: left; font: inherit; text-transform: no
 .beat-media .ev-audio { width: 180px; }
 
 /* ── evidence modal ───────────────────────────────────────────────── */
-.modal-backdrop { position: fixed; inset: 0; z-index: 1000;
+.modal-backdrop { position: fixed; inset: 0; z-index: 1400;
   background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center;
   padding: 24px; animation: modal-fade .15s ease both; }
 @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
