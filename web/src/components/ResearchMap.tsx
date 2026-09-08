@@ -177,7 +177,10 @@ function MapCanvas({
   const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
   const [panning, setPanning] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ px: number; py: number; vx: number; vy: number; w: number; h: number; moved: boolean } | null>(null);
+  const drag = useRef<
+    { px: number; py: number; vx: number; vy: number; w: number; h: number;
+      moved: boolean; captured: boolean; onBg: boolean; pid: number; el: Element } | null
+  >(null);
   const suppressClick = useRef(false);
 
   const zoomAt = useCallback((factor: number, fx = 0.5, fy = 0.5) => {
@@ -205,17 +208,30 @@ function MapCanvas({
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
+  // Capturing the pointer on pointerdown makes the browser retarget the
+  // following `click` to the <svg>, so a dot's own onClick never runs. Capture
+  // is deferred to the first real move, so a plain tap on a dot still clicks
+  // the dot; a drag still pans.
   const onPointerDown = (e: React.PointerEvent) => {
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    drag.current = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y, w: view.w, h: view.h, moved: false };
+    const tag = (e.target as Element).tagName;
+    drag.current = {
+      px: e.clientX, py: e.clientY, vx: view.x, vy: view.y, w: view.w, h: view.h,
+      moved: false, captured: false, onBg: tag === "svg" || tag === "rect",
+      pid: e.pointerId, el: e.currentTarget as Element,
+    };
     suppressClick.current = false;
-    setPanning(true);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d || !wrapRef.current) return;
+    if (!d.moved && Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) <= 6) return;
+    if (!d.captured) {
+      d.moved = true;
+      d.captured = true;
+      d.el.setPointerCapture?.(d.pid);
+      setPanning(true);
+    }
     const rect = wrapRef.current.getBoundingClientRect();
-    if (Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) > 3) d.moved = true;
     const dx = ((e.clientX - d.px) / rect.width) * d.w;
     const dy = ((e.clientY - d.py) / rect.height) * d.h;
     setView(clampView({ x: d.vx - dx, y: d.vy - dy, w: d.w, h: d.h }));
@@ -226,8 +242,9 @@ function MapCanvas({
     drag.current = null;
     setPanning(false);
     if (!d) return;
+    if (d.captured) d.el.releasePointerCapture?.(d.pid);
     suppressClick.current = d.moved;
-    if (!d.moved) onSelect(null);
+    if (!d.moved && d.onBg) onSelect(null);
   };
 
   const tip = hover && !panning
@@ -308,10 +325,16 @@ function MapCanvas({
           );
         })}
 
-        {dots.map((d, i) => {
+        {(() => {
+          // A dot paints ~2px on screen at full zoom, too small to click. Each
+          // gets an invisible hit pad, sized so the target stays roughly
+          // constant on screen as the map zooms.
+          const hitR = Math.max(4.5, (view.w / W) * 14);
+          return dots.map((d, i) => {
           const dim = selected && selected !== d.e.objective_id;
           const conflicted = conflictIds?.has(d.e.id);
           const label = `${d.e.title || d.e.modality || "evidence"}${conflicted ? " · cross-examined" : ""}${d.director ? " · your upload" : ""}`;
+          const hit = <circle cx={d.x} cy={d.y} r={hitR} fill="none" pointerEvents="all" />;
           const ring = conflicted ? (
             <circle cx={d.x} cy={d.y} r={d.isImg ? 12 : 6} fill="none"
                     stroke="var(--device-red)" strokeWidth={1.4} opacity={0.92} pointerEvents="none">
@@ -337,29 +360,35 @@ function MapCanvas({
           if (d.isImg) {
             return (
               <g key={i} {...common}>
+                {hit}
                 {ring}
                 <image href={d.thumb} x={d.x - 9} y={d.y - 9} width={18} height={18}
                        clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice" />
-                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} />
+                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} pointerEvents="none" />
               </g>
             );
           }
           if (d.glyph) {
             return (
               <g key={i} {...common}>
+                {hit}
                 {ring}
-                <text x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11} fill={d.color}>{d.glyph}</text>
+                <text x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11} fill={d.color}
+                      pointerEvents="none">{d.glyph}</text>
               </g>
             );
           }
           return (
             <g key={i} {...common}>
+              {hit}
               {ring}
-              <circle cx={d.x} cy={d.y} r={d.director ? 3.8 : 2.7}
-                      fill={d.color} stroke={d.director ? "var(--map-accent)" : "none"} strokeWidth={d.director ? 1 : 0} />
+              <circle cx={d.x} cy={d.y} r={d.director ? 4.4 : 3.2}
+                      fill={d.color} stroke={d.director ? "var(--map-accent)" : "none"}
+                      strokeWidth={d.director ? 1 : 0} pointerEvents="none" />
             </g>
           );
-        })}
+          });
+        })()}
       </svg>
 
       {tip && <div className="maptip" style={tip}>{hover!.label}</div>}
