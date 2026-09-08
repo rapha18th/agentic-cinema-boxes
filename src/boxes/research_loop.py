@@ -183,6 +183,7 @@ def _do_round(
                 full_content=d.full_content, round_no=run_no,
                 harvest_images=per_obj_budget["img"], harvest_docs=per_obj_budget["doc"],
                 harvest_av=per_obj_budget["av"],
+                media_key=f"{obj.name} {proj.premise}",
             )
             return obj, found
 

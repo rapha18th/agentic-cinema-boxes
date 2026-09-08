@@ -20,11 +20,33 @@ path in ``parallel_search`` takes as-is.
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
+
+# A catalogue full-text search over file descriptions is narrow. An eight-word
+# objective sentence AND-matches nothing; three salient terms match plenty.
+_STOP = {
+    "the", "a", "an", "of", "and", "or", "to", "in", "on", "at", "for", "with",
+    "from", "by", "as", "is", "are", "was", "were", "that", "this", "these",
+    "those", "its", "their", "his", "her", "which", "who", "how", "what", "when",
+    "where", "into", "about", "over", "under", "between", "during", "film", "movie",
+    "story", "scene", "premise", "drama", "set", "year", "period",
+}
+
+
+def keywords(text: str, n: int = 4) -> list[str]:
+    seen: list[str] = []
+    for w in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", (text or "").lower()):
+        if w in _STOP or w in seen:
+            continue
+        seen.append(w)
+        if len(seen) >= n:
+            break
+    return seen
 
 # Commons' API policy wants a descriptive agent with contact info; a generic
 # browser string gets throttled or served an HTML error instead of JSON.
@@ -80,11 +102,12 @@ _COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 
 def commons_media(query: str, *, want: tuple[str, ...] = ("audio", "video"),
                   limit: int = 6, timeout: float = 20.0) -> list[MediaHit]:
+    terms = " ".join(keywords(query)) or query
     out: list[MediaHit] = []
     for kind in want:
         params = {
             "action": "query", "format": "json", "generator": "search",
-            "gsrsearch": f"filetype:{kind} {query}", "gsrnamespace": "6",
+            "gsrsearch": f"filetype:{kind} {terms}", "gsrnamespace": "6",
             "gsrlimit": str(max(2, limit)), "prop": "imageinfo",
             "iiprop": "url|mediatype|size|mime|extmetadata",
         }
@@ -170,11 +193,13 @@ def _archive_is_open(meta: dict) -> tuple[bool, str]:
 
 def archive_media(query: str, *, want: tuple[str, ...] = ("audio", "video"),
                   limit: int = 6, timeout: float = 20.0) -> list[MediaHit]:
-    mt = " OR ".join(("audio" if "audio" in want else "", "movies" if "video" in want else "")).strip(" OR ")
-    if not mt:
+    types_ = [t for t, on in (("audio", "audio" in want), ("movies", "video" in want)) if on]
+    if not types_:
         return []
+    kw = keywords(query)
+    terms = " AND ".join(f'"{w}"' for w in kw) if kw else query
     params = {
-        "q": f"({query}) AND mediatype:({mt})",
+        "q": f"({terms}) AND mediatype:({' OR '.join(types_)})",
         "fl[]": ["identifier", "title"],
         "rows": str(limit + 3), "output": "json",
         "sort[]": "downloads desc",
@@ -237,10 +262,12 @@ def find_media(query: str, *, audio: bool = True, video: bool = True,
                limit: int = 3) -> list[MediaHit]:
     """Openly-licensed audio and video for a research query, lightest first.
     Commons is tried before archive.org: it is smaller, cleaner, and its
-    licensing needs no interpretation."""
+    licensing needs no interpretation. A catalogue keyword search is shallow,
+    so a hit is kept only if its own title shares a term with the query."""
     want = tuple(k for k, on in (("audio", audio), ("video", video)) if on)
     if not want or not query.strip():
         return []
+    kw = set(keywords(query, n=6))
     hits: list[MediaHit] = []
     with ThreadPoolExecutor(max_workers=2) as ex:
         futs = [
@@ -257,6 +284,8 @@ def find_media(query: str, *, audio: bool = True, video: bool = True,
     for h in sorted(hits, key=lambda h: (h.source != "commons", h.size or 1 << 40)):
         if h.url in seen:
             continue
+        if kw and not (kw & set(keywords(h.title, n=12))):
+            continue  # title has nothing to do with the objective
         seen.add(h.url)
         uniq.append(h)
     return uniq[:limit]

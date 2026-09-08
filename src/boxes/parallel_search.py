@@ -474,6 +474,7 @@ def research(
     harvest_images: int = 0,
     harvest_docs: int = 0,
     harvest_av: int = 0,
+    media_key: str = "",
 ) -> list[Evidence]:
     """One research pass: search the objective, extract the top sources, harvest a
     few pictures, documents, and recordings, and return evidence with provenance."""
@@ -529,7 +530,7 @@ def research(
         got_av = sum(1 for e in evidence if e.modality in ("audio", "video"))
         if got_av < harvest_av:
             evidence += harvest_media_catalogs(
-                (queries[0] if queries else objective),
+                media_key or objective or (queries[0] if queries else ""),
                 objective_id=objective_id, round_no=round_no,
                 av=harvest_av - got_av,
             )
