@@ -185,18 +185,34 @@ def add_evidence(uid: str, pid: str, ev: dict, vector: list[float] | None = None
         _proj_ref(uid, pid).collection("vectors").document(ev["id"]).set({"vector768": vector})
 
 
+# A 768-float vector doc is a few KB; a full batch of them plus their evidence
+# docs can trip Firestore's per-commit size ceiling ("Transaction too big").
+# Commit in small windows, and if the server still rejects a window, fall back
+# to one write at a time so a large run always finishes persisting.
+_EVIDENCE_BATCH = 60
+
+
 def add_evidence_batch(uid: str, pid: str, items: list[tuple[dict, list[float] | None]]) -> None:
-    batch = db().batch()
     col = _proj_ref(uid, pid).collection("evidence")
     vec_col = _proj_ref(uid, pid).collection("vectors")
-    for ev, vec in items:
-        doc = dict(ev)
-        if vec is not None:
-            doc["vector768"] = firestore.DELETE_FIELD
-        batch.set(col.document(ev["id"]), doc, merge=True)
-        if vec is not None:
-            batch.set(vec_col.document(ev["id"]), {"vector768": vec})
-    batch.commit()
+    for start in range(0, len(items), _EVIDENCE_BATCH):
+        window = items[start : start + _EVIDENCE_BATCH]
+        try:
+            batch = db().batch()
+            for ev, vec in window:
+                doc = dict(ev)
+                if vec is not None:
+                    doc["vector768"] = firestore.DELETE_FIELD
+                batch.set(col.document(ev["id"]), doc, merge=True)
+                if vec is not None:
+                    batch.set(vec_col.document(ev["id"]), {"vector768": vec})
+            batch.commit()
+        except Exception:  # noqa: BLE001 - server rejected the commit; write singly
+            for ev, vec in window:
+                try:
+                    add_evidence(uid, pid, ev, vec)
+                except Exception:  # noqa: BLE001, S110
+                    pass
 
 
 def list_evidence(uid: str, pid: str) -> list[dict]:

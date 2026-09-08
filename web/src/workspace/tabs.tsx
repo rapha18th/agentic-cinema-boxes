@@ -104,12 +104,13 @@ export function EvidenceCards({
 
 /* ── overview ──────────────────────────────────────────────────────── */
 export function OverviewTab({
-  overview, boxes, highlights, reel, onOpen, onGoto, sideSlot, conflicts,
+  overview, boxes, highlights, reel, verdicts, onOpen, onGoto, sideSlot, conflicts,
 }: {
   overview?: string;
   boxes: ResearchBox[];
   highlights: Evidence[];
   reel?: any[];
+  verdicts?: Verdict[];
   onOpen: (e: Evidence) => void;
   onGoto?: (tab: TabId, boxId?: string) => void;
   sideSlot?: ReactNode;
@@ -159,6 +160,22 @@ export function OverviewTab({
         </div>
         {sideSlot}
       </section>
+
+      {!!verdicts?.length && (
+        <section className="card">
+          <div className="section-head">
+            <div><p className="eyebrow">Cross-examined sources</p>
+              <h2 className="display-heading small">Where the record disagrees</h2></div>
+            {onGoto && <button className="ghost" onClick={() => onGoto("trace")}>Full trace →</button>}
+          </div>
+          {verdicts.slice(0, 4).map((v, i) => (
+            <div className={`verdict ${v.relation}`} key={v.id || i}>
+              <b>{relationLabel(v.relation)}</b> · {cleanText(v.explanation, 200)}
+              <div className="muted">{tidy(v.a_cite)}  vs  {tidy(v.b_cite)}</div>
+            </div>
+          ))}
+        </section>
+      )}
 
       {!!reel?.length && (
         <section className="card">

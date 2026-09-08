@@ -195,7 +195,17 @@ def _run_stream(uid: str, pid: str, premise: str, depth: str, run_id: str):
     def worker() -> None:
         try:
             proj = workflow_agent.execute(premise, depth=depth, on_event=on_event)
-            # persist evidence with 768 vectors
+        except Exception as e:  # noqa: BLE001 - the research itself failed
+            q.put({"type": "error", "error": str(e)})
+            store.set_project_status(uid, pid, status="error", error=str(e))
+            store.finish_run(uid, pid, run_id)
+            q.put(None)
+            return
+
+        # Research is done. Everything below is persistence and finishing
+        # touches: a failure here must not turn a finished run into an error.
+        beats: list = []
+        try:
             coords = _semantic_coordinates(proj.vectors)
             items = []
             for i, e in enumerate(proj.evidence):
@@ -204,32 +214,33 @@ def _run_stream(uid: str, pid: str, premise: str, depth: str, run_id: str):
                 if i < len(coords):
                     doc["map_x"], doc["map_y"] = coords[i]
                 items.append((doc, vec))
-            # Two writes per item (metadata + private vector), kept below the
-            # Firestore 500-operation batch limit.
-            for k in range(0, len(items), 200):
-                store.add_evidence_batch(uid, pid, items[k : k + 200])
+            store.add_evidence_batch(uid, pid, items)
+        except Exception:  # noqa: BLE001, S110
+            pass
+        try:
             beats = reel_mod.build_reel(premise, proj.evidence)
             store.set_reel(uid, pid, [b.to_dict() for b in beats])
-            try:
-                narrative = synthesis_mod.build(
-                    premise,
-                    [o.to_dict() for o in proj.objectives],
-                    [e.to_dict() for e in proj.evidence],
-                )
-                if narrative.overview:
-                    store.set_project_status(uid, pid, overview=narrative.overview)
-                for objective in proj.objectives:
-                    summary = narrative.box_summaries.get(objective.id)
-                    if summary:
-                        store.upsert_box(uid, pid, {"id": objective.id, "summary": summary})
-            except Exception:  # noqa: BLE001, S110
-                pass
+        except Exception:  # noqa: BLE001, S110
+            pass
+        try:
+            narrative = synthesis_mod.build(
+                premise,
+                [o.to_dict() for o in proj.objectives],
+                [e.to_dict() for e in proj.evidence],
+            )
+            if narrative.overview:
+                store.set_project_status(uid, pid, overview=narrative.overview)
+            for objective in proj.objectives:
+                summary = narrative.box_summaries.get(objective.id)
+                if summary:
+                    store.upsert_box(uid, pid, {"id": objective.id, "summary": summary})
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        try:
             q.put({"type": "reel", "beats": [b.to_dict() for b in beats]})
             q.put({"type": "complete", "confidence": proj.confidence,
                    "evidence": len(proj.evidence), "boxes": len(proj.objectives)})
-        except Exception as e:  # noqa: BLE001
-            q.put({"type": "error", "error": str(e)})
-            store.set_project_status(uid, pid, status="error", error=str(e))
         finally:
             store.finish_run(uid, pid, run_id)
             q.put(None)

@@ -4,7 +4,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { EvidenceModal } from "../components/EvidenceModal";
 import {
   DepartmentsTab, EvidenceTab, OverviewTab, PriorArtTab, TAB_IDS, TraceTab,
-  conflictMap, pctOf, relationLabel, type TabId,
+  conflictMap, pctOf, type TabId,
 } from "../workspace/tabs";
 import type { Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
 
@@ -95,28 +95,18 @@ export function Demo() {
           boxes={S.boxes}
           highlights={highlights}
           reel={S.reel}
+          verdicts={S.verdicts}
           conflicts={conflicts}
           onOpen={setModalEv}
           onGoto={goto}
           sideSlot={
-            S.verdicts.length ? (
-              <div className="card">
-                <p className="eyebrow">Cross-examined</p>
-                <div className={`verdict ${S.verdicts[0].relation}`}>
-                  <b>{relationLabel(S.verdicts[0].relation)}</b> · {S.verdicts[0].explanation}
-                  <div className="muted">A: {S.verdicts[0].a_cite}</div>
-                  <div className="muted">B: {S.verdicts[0].b_cite}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="card">
-                <p className="eyebrow">How the run stopped</p>
-                <p className="muted">{S.stop_reason || "Every objective passed its readiness threshold."}</p>
-                {!!S.emergent_boxes.length && (
-                  <p className="muted">It opened {S.emergent_boxes.join(", ")} on its own.</p>
-                )}
-              </div>
-            )
+            <div className="card">
+              <p className="eyebrow">How the run stopped</p>
+              <p className="muted">{S.stop_reason || "Every objective passed its readiness threshold."}</p>
+              {!!S.emergent_boxes.length && (
+                <p className="muted">It opened {S.emergent_boxes.join(", ")} on its own.</p>
+              )}
+            </div>
           }
         />
       )}
