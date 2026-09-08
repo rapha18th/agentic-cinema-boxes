@@ -92,19 +92,21 @@ BOXES harvests the other modalities from the pages Parallel surfaces:
 | text | Parallel Extract full content | text |
 | image | og:image and substantive inline images | picture + caption |
 | pdf | links ending `.pdf`, fetched whole (`%PDF-`, up to 12 MB) | document + caption |
-| audio | `<audio>`, og:audio, direct `.mp3` / `.wav` / `.m4a` links | ffmpeg-trimmed clip + caption |
-| video | `<video>`, og:video, direct `.mp4` / `.webm` links | ffmpeg-trimmed clip + caption |
+| audio | page `<audio>` / og:audio, then Wikimedia Commons and archive.org by direct API | ffmpeg-trimmed clip + caption |
+| video | page `<video>` / og:video, then Wikimedia Commons and archive.org by direct API | ffmpeg-trimmed clip + caption |
 
-Every asset keeps its full source URL and a conservative rights note (`open-access
-host · verify item rights` for known archives; `rights not verified` otherwise).
-Trimmed clips link back to the full recording at its source.
+Every asset keeps its full source URL and a rights note. Trimmed clips link back
+to the full recording at its source.
 
-Text, images, and PDFs harvest reliably. Audio and video depend on the source
-page exposing a directly fetchable file: many of the hosts that carry open
-recordings put them behind a player or block a server-side fetch. Harvest fetches
-now use a browser user agent and accept archive downloads served as
-`octet-stream`, which widens the set of pages that yield a clip. A headless fetch
-or an archive.org API path would close the rest of the gap.
+Text, images, and PDFs harvest from the pages Parallel surfaces. Audio and video
+mostly do not: the hosts that carry open recordings put the file behind a
+JavaScript player, and Parallel Extract returns markdown, so a page's `<video>`
+element does not survive it. `media_sources.py` closes that gap with a direct-API
+pass over two catalogues that publish a fetchable file and a licence: **Wikimedia
+Commons** (MediaWiki API, File namespace, CC or public domain by policy) and
+**archive.org** (advancedsearch plus per-item metadata, gated to explicit CC /
+public-domain items and a short list of open collections). Each objective tops up
+its audio and video budget from there, keyed on the objective itself.
 
 ## The app
 
@@ -165,6 +167,7 @@ src/boxes/
   evidence.py         the evidence unit: provenance, modality, media URL, round, vector
   ontology.py         research plan + emergent-box detection, batched per round
   parallel_search.py  Parallel Search + Extract, plus image/pdf/audio/video harvest
+  media_sources.py    Wikimedia Commons + archive.org: openly-licensed a/v by direct API
   media.py            ffmpeg trims audio/video to a short clip
   coverage.py         per-objective coverage + research completeness + stopping rule
   contradiction.py    embedding candidate pairs, Gemini verdicts, verified concurrently

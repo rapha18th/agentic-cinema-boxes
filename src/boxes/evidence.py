@@ -74,7 +74,7 @@ _PRIMARY_HOSTS = (
 )
 _DOCUMENTARY_HOSTS = (
     "britannica.com", "history.com", "bbc.", "reuters.com", "apnews.com",
-    "nytimes.com", "theguardian.com", "smithsonianmag.com",
+    "nytimes.com", "theguardian.com", "smithsonianmag.com", "commons.wikimedia.org",
 )
 
 

@@ -30,6 +30,7 @@ from google.genai import types
 
 from . import config
 from . import media as media_mod
+from . import media_sources
 from .embeddings import embed_parts, image_part
 from .evidence import Evidence
 
@@ -61,15 +62,17 @@ _MEDIA_META = re.compile(
 _AV_TAG = re.compile(r'<(?:source|audio|video)\b[^>]+src=["\']([^"\']+)["\']', re.I)
 _EXT_KIND = {
     "pdf": "pdf",
-    "mp3": "audio", "wav": "audio", "m4a": "audio", "aac": "audio", "flac": "audio", "oga": "audio",
-    "mp4": "video", "webm": "video", "m4v": "video",
+    "mp3": "audio", "wav": "audio", "m4a": "audio", "aac": "audio", "flac": "audio",
+    "oga": "audio", "ogg": "audio", "opus": "audio",
+    "mp4": "video", "webm": "video", "m4v": "video", "ogv": "video", "mov": "video",
 }
 _MEDIA_EXT = re.compile(r"\.(" + "|".join(_EXT_KIND) + r")(?:$|[?&#])", re.I)
 _MIME = {
     "pdf": "application/pdf",
     "mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4", "aac": "audio/aac",
-    "flac": "audio/flac", "oga": "audio/ogg",
+    "flac": "audio/flac", "oga": "audio/ogg", "ogg": "audio/ogg", "opus": "audio/ogg",
     "mp4": "video/mp4", "webm": "video/webm", "m4v": "video/mp4",
+    "ogv": "video/ogg", "mov": "video/quicktime",
 }
 _SIZE = {  # (min, max) bytes per kind; audio/video are trimmed after download
     "pdf": (10_000, 12_000_000),
@@ -200,6 +203,17 @@ _UA = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+# Wikimedia enforces its user-agent policy on upload.wikimedia.org and 403s a
+# bare browser string. It wants an identifiable client with a contact URL.
+_WIKIMEDIA_UA = {
+    **_UA,
+    "User-Agent": "THEBOXES-research/0.1 (Agentic Cinema hackathon; +https://agentic-cinema-boxes.web.app)",
+}
+
+
+def _ua_for(url: str) -> dict:
+    host = urlparse(url).netloc.lower()
+    return _WIKIMEDIA_UA if ("wikimedia.org" in host or "wikipedia.org" in host) else _UA
 
 
 def _get_html(page_url: str, timeout: float = 8.0) -> str:
@@ -207,7 +221,7 @@ def _get_html(page_url: str, timeout: float = 8.0) -> str:
     # whatever way the network stack finds first (bad IDNA host, refused
     # connection, decode error) — none of it should ever take the caller down.
     try:
-        r = httpx.get(page_url, timeout=timeout, follow_redirects=True, headers=_UA)
+        r = httpx.get(page_url, timeout=timeout, follow_redirects=True, headers=_ua_for(page_url))
         r.raise_for_status()
         return r.text
     except Exception:  # noqa: BLE001
@@ -263,7 +277,7 @@ def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] |
     Same rationale as _get_html: a scraped asset URL can be malformed in ways
     that surface anywhere from URL parsing to DNS to the socket layer."""
     try:
-        r = httpx.get(url, timeout=timeout, follow_redirects=True, headers=_UA)
+        r = httpx.get(url, timeout=timeout, follow_redirects=True, headers=_ua_for(url))
         r.raise_for_status()
     except Exception:  # noqa: BLE001
         return None
@@ -281,18 +295,22 @@ def _fetch(url: str, *, want: str, timeout: float = 12.0) -> tuple[bytes, str] |
             return None
         return data, "application/pdf"
     ext = (_MEDIA_EXT.search(url) or [None, ""])[1].lower()
-    # Archive hosts serve downloads as octet-stream; trust the URL extension
-    # in that case, and sanity-check the file's magic bytes.
-    generic = ct in ("", "application/octet-stream", "binary/octet-stream", "application/download")
+    # Archive and Commons hosts serve downloads as octet-stream, or Ogg audio
+    # and video both as `application/ogg`. Trust the URL extension in those
+    # cases, and sanity-check the file's magic bytes either way.
+    generic = ct in ("", "application/octet-stream", "binary/octet-stream",
+                     "application/download", "application/ogg", "application/x-ogg")
     if want == "audio":
         ok = ct.startswith("audio/") or (generic and ext in _MIME and _MIME[ext].startswith("audio/"))
         if not ok or not (data[:3] == b"ID3" or data[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2") or data[:4] in (b"OggS", b"fLaC", b"RIFF") or data[4:8] == b"ftyp"):
             return None
     if want == "video":
         ok = ct.startswith("video/") or (generic and ext in _MIME and _MIME[ext].startswith("video/"))
-        if not ok or not (data[4:8] == b"ftyp" or data[:4] == b"\x1aE\xdf\xa3" or data[:4] == b"RIFF"):
+        if not ok or not (data[4:8] == b"ftyp" or data[:4] in (b"\x1aE\xdf\xa3", b"RIFF", b"OggS")):
             return None
-    return data, (ct if ct.startswith(("audio/", "video/")) else _MIME.get(ext, f"{want}/octet-stream"))
+    if ct.startswith(("audio/", "video/")):
+        return data, "audio/wav" if ct == "audio/x-wav" else ct
+    return data, _MIME.get(ext, f"{want}/octet-stream")
 
 
 def _rights(host: str) -> str:
@@ -333,6 +351,40 @@ def _page_assets(page: dict, *, images: int, docs: int, av: int) -> list[dict]:
     return mats
 
 
+def _media_evidence(
+    *, kind: str, data: bytes, mime: str, media_url: str, page_url: str,
+    caption: str, publish_date: str | None, objective_id: str, round_no: int,
+    trimmed: bool, license_note: str, query: str,
+) -> Evidence | None:
+    """Embed one harvested asset with Gemini Embedding 2 (media + caption) and
+    wrap it as Evidence. Returns None if the embed call fails."""
+    caption = (caption or _GLYPH.get(kind, "reference"))[:200]
+    try:
+        part = image_part(data, mime) if kind == "image" else types.Part.from_bytes(
+            data=data, mime_type=mime
+        )
+        vec = embed_parts([part, types.Part(text=caption)], dim=768)
+    except Exception:  # noqa: BLE001
+        return None
+    ev = Evidence(
+        text=f"[{kind}] {caption}",
+        url=page_url,
+        title=caption[:120],
+        publish_date=publish_date,
+        modality=kind,
+        objective_id=objective_id,
+        query=query,
+        image_url=media_url if kind == "image" else "",
+        media_url=media_url,
+        media_mime=mime,
+        media_trimmed=trimmed,
+        round=round_no,
+        license_note=license_note,
+    )
+    ev.vector = vec
+    return ev
+
+
 def harvest_assets(
     pages: list[dict], *, objective_id: str, round_no: int,
     images: int = 0, docs: int = 0, av: int = 0,
@@ -356,33 +408,53 @@ def harvest_assets(
         k = m["kind"]
         if budget.get(k, 0) <= 0:
             continue
-        page, media_url, mime = m["page"], m["media_url"], m["mime"]
-        caption = (page.get("title") or _GLYPH.get(k, "reference"))[:200]
-        try:
-            part = image_part(m["data"], mime) if k == "image" else types.Part.from_bytes(
-                data=m["data"], mime_type=mime
-            )
-            vec = embed_parts([part, types.Part(text=caption)], dim=768)
-        except Exception:  # noqa: BLE001
-            continue
-        ev = Evidence(
-            text=f"[{k}] {caption}",
-            url=page.get("url", ""),
-            title=caption[:120],
-            publish_date=page.get("publish_date"),
-            modality=k,
-            objective_id=objective_id,
-            query=f"{k} harvest",
-            image_url=media_url if k == "image" else "",
-            media_url=media_url,
-            media_mime=mime,
-            media_trimmed=m["trimmed"],
-            round=round_no,
-            license_note=_rights(urlparse(media_url).netloc.lower()),
+        page = m["page"]
+        ev = _media_evidence(
+            kind=k, data=m["data"], mime=m["mime"], media_url=m["media_url"],
+            page_url=page.get("url", ""), caption=page.get("title") or "",
+            publish_date=page.get("publish_date"), objective_id=objective_id,
+            round_no=round_no, trimmed=m["trimmed"], query=f"{k} harvest",
+            license_note=_rights(urlparse(m["media_url"]).netloc.lower()),
         )
-        ev.vector = vec
+        if ev is None:
+            continue
         out.append(ev)
         budget[k] -= 1
+    return out
+
+
+def harvest_media_catalogs(
+    query: str, *, objective_id: str, round_no: int, av: int,
+) -> list[Evidence]:
+    """Openly-licensed audio and video from Wikimedia Commons and archive.org,
+    by direct API. The pages Parallel returns almost never carry a fetchable
+    clip; these catalogues do, and they hand back a URL and a licence, not a
+    JavaScript player."""
+    if av <= 0 or not query.strip():
+        return []
+    try:
+        hits = media_sources.find_media(query, audio=True, video=True, limit=av + 2)
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[Evidence] = []
+    for h in hits:
+        if len(out) >= av:
+            break
+        got = _fetch(h.url, want=h.kind)
+        if not got:
+            continue
+        data, mime = got
+        data, mime, trimmed = media_mod.trim_av(data, mime)
+        if len(data) > 4_000_000:
+            continue  # Gemini Embedding 2 rejects a payload this large; skip it
+        ev = _media_evidence(
+            kind=h.kind, data=data, mime=mime, media_url=h.url, page_url=h.page_url,
+            caption=h.title, publish_date=None, objective_id=objective_id,
+            round_no=round_no, trimmed=trimmed, query=f"{h.kind} catalog: {h.source}",
+            license_note=f"{h.source} · {h.license}" if h.license else h.source,
+        )
+        if ev is not None:
+            out.append(ev)
     return out
 
 
@@ -450,6 +522,17 @@ def research(
             pages, objective_id=objective_id, round_no=round_no,
             images=harvest_images, docs=harvest_docs, av=harvest_av,
         )
+
+    # The page scan rarely finds a fetchable clip. Top up the audio/video
+    # budget from the open catalogues, keyed on the objective itself.
+    if harvest_av:
+        got_av = sum(1 for e in evidence if e.modality in ("audio", "video"))
+        if got_av < harvest_av:
+            evidence += harvest_media_catalogs(
+                (queries[0] if queries else objective),
+                objective_id=objective_id, round_no=round_no,
+                av=harvest_av - got_av,
+            )
     return evidence
 
 
