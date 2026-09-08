@@ -176,7 +176,7 @@ def archive_media(query: str, *, want: tuple[str, ...] = ("audio", "video"),
     params = {
         "q": f"({query}) AND mediatype:({mt})",
         "fl[]": ["identifier", "title"],
-        "rows": str(max(3, limit * 2)), "output": "json",
+        "rows": str(limit + 3), "output": "json",
         "sort[]": "downloads desc",
     }
     try:
@@ -220,8 +220,9 @@ def archive_media(query: str, *, want: tuple[str, ...] = ("audio", "video"),
             title=str(meta.get("title") or ident), license=lic, size=size,
         )
 
-    with ThreadPoolExecutor(max_workers=min(4, len(docs) or 1)) as ex:
-        for hit in ex.map(one, docs[: limit * 2]):
+    probe = docs[: limit + 2]
+    with ThreadPoolExecutor(max_workers=min(4, len(probe) or 1)) as ex:
+        for hit in ex.map(one, probe):
             if hit:
                 out.append(hit)
             if len(out) >= limit:
