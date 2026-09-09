@@ -35,6 +35,10 @@ _STOP = {
     "those", "its", "their", "his", "her", "which", "who", "how", "what", "when",
     "where", "into", "about", "over", "under", "between", "during", "film", "movie",
     "story", "scene", "premise", "drama", "set", "year", "period",
+    # generic words that collide across unrelated catalogue titles
+    "first", "second", "third", "draft", "report", "version", "demo", "test",
+    "exercise", "practice", "classroom", "sample", "example", "part", "clip",
+    "video", "audio", "recording", "documentary", "historical", "history",
 }
 
 
@@ -268,6 +272,7 @@ def find_media(query: str, *, audio: bool = True, video: bool = True,
     if not want or not query.strip():
         return []
     kw = set(keywords(query, n=6))
+    need = min(2, len(kw))  # a multi-word query must share more than one term
     hits: list[MediaHit] = []
     with ThreadPoolExecutor(max_workers=2) as ex:
         futs = [
@@ -284,7 +289,7 @@ def find_media(query: str, *, audio: bool = True, video: bool = True,
     for h in sorted(hits, key=lambda h: (h.source != "commons", h.size or 1 << 40)):
         if h.url in seen:
             continue
-        if kw and not (kw & set(keywords(h.title, n=12))):
+        if kw and len(kw & set(keywords(h.title, n=12))) < need:
             continue  # title has nothing to do with the objective
         seen.add(h.url)
         uniq.append(h)
