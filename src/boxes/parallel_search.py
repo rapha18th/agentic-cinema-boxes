@@ -6,15 +6,17 @@ hypothesis into evidence units. Parallel recommends this pairing for multi-hop
 research, and it is what makes THE BOXES a Parallel project rather than a project
 that happens to call a search box.
 
+Calls go through the parallel-web SDK (`from parallel import Parallel`,
+`client.search(...)` / `client.extract(...)`). A raw httpx path to the same v1
+endpoints stays as a fallback for when the SDK is absent or a test points
+PARALLEL_SEARCH_URL at a local stub.
+
 Contracts (Parallel API v1):
-  POST https://api.parallel.ai/v1/search
-    body {"objective": str, "search_queries": [str], "mode": "advanced"|"fast"|"turbo"}
-    resp {"results": [{"url","title","publish_date","excerpts": [str]}], ...}
-  POST https://api.parallel.ai/v1/extract
-    body {"urls": [str], "objective": str, "search_queries": [str],
-          "advanced_settings": {"full_content": true}}
-    resp {"results": [{"url","title","publish_date","excerpts": [str],"full_content": str}],
-          "errors": [...], "session_id": str}
+  client.search(objective=str, search_queries=[str], mode="advanced"|"fast"|"turbo")
+    -> results[{url, title, publish_date, excerpts: [str]}]
+  client.extract(urls=[str], objective=str, search_queries=[str],
+                 advanced_settings={"full_content": true})
+    -> results[{url, title, publish_date, excerpts: [str], full_content: str}], errors, session_id
 """
 
 from __future__ import annotations
@@ -25,6 +27,11 @@ from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 import httpx
+
+try:
+    from parallel import Parallel  # parallel-web SDK, the first-class client
+except Exception:  # SDK not installed in this environment
+    Parallel = None
 
 from google.genai import types
 
@@ -115,6 +122,23 @@ def _headers(key: str) -> dict:
     return {"x-api-key": key, "Content-Type": "application/json"}
 
 
+# The SDK always talks to api.parallel.ai. Tests point PARALLEL_SEARCH_URL at a
+# local stub, so when the URL is redirected the raw httpx path runs instead.
+_SDK_BASE_URL = "https://api.parallel.ai/v1/search"
+_sdk_client = None
+
+
+def _client(key: str):
+    """The parallel-web SDK client, or None when the raw httpx path should run
+    (SDK missing, no key, or PARALLEL_SEARCH_URL redirected for a test)."""
+    global _sdk_client
+    if Parallel is None or not key or config.PARALLEL_SEARCH_URL != _SDK_BASE_URL:
+        return None
+    if _sdk_client is None:
+        _sdk_client = Parallel(api_key=key)
+    return _sdk_client
+
+
 @dataclass
 class SearchHit:
     title: str
@@ -142,6 +166,14 @@ def search(
     key = config.parallel_api_key()
     if not key:
         return _stub(query, max_results)
+
+    client = _client(key)
+    if client is not None:
+        try:
+            return _sdk_search(client, query, objective, extra_queries, mode, max_results)
+        except Exception:
+            pass  # fall through to the raw request below
+
     body = {
         "objective": objective or query,
         "search_queries": [query, *(extra_queries or [])],
@@ -162,6 +194,25 @@ def search(
     return hits[:max_results]
 
 
+def _sdk_search(client, query, objective, extra_queries, mode, max_results):
+    res = client.search(
+        objective=objective or query,
+        search_queries=[query, *(extra_queries or [])],
+        mode=mode,
+        max_chars_total=40_000,
+    )
+    hits = [
+        SearchHit(
+            title=_clean(r.title or ""),
+            url=r.url or "",
+            text=_clean("\n\n".join(r.excerpts or [])),
+            publish_date=r.publish_date,
+        )
+        for r in (res.results or [])
+    ]
+    return hits[:max_results]
+
+
 # ----------------------------------------------------------------------------- #
 # Extract
 # ----------------------------------------------------------------------------- #
@@ -177,6 +228,16 @@ def extract(
     key = config.parallel_api_key()
     if not key or not urls:
         return []
+
+    client = _client(key)
+    if client is not None:
+        try:
+            return _sdk_extract(
+                client, urls, objective, search_queries, full_content, max_chars_total
+            )
+        except Exception:
+            pass  # fall through to the raw request below
+
     body: dict = {
         "urls": urls[:20],
         "objective": objective,
@@ -203,6 +264,30 @@ def extract(
                 "publish_date": it.get("publish_date"),
                 "content": _clean(raw),
                 "raw": raw[:60_000],  # kept unstripped so image markdown survives
+            }
+        )
+    return out
+
+
+def _sdk_extract(client, urls, objective, search_queries, full_content, max_chars_total):
+    kwargs: dict = {"urls": urls[:20], "objective": objective}
+    if search_queries:
+        kwargs["search_queries"] = search_queries
+    if full_content:
+        kwargs["advanced_settings"] = {"full_content": True}
+    if max_chars_total:
+        kwargs["max_chars_total"] = max_chars_total
+    res = client.extract(**kwargs)
+    out: list[dict] = []
+    for r in (res.results or []):
+        raw = r.full_content or "\n\n".join(r.excerpts or [])
+        out.append(
+            {
+                "url": r.url or "",
+                "title": _clean(r.title or ""),
+                "publish_date": r.publish_date,
+                "content": _clean(raw),
+                "raw": raw[:60_000],
             }
         )
     return out
