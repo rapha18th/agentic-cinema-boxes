@@ -8,16 +8,21 @@ import { DepthPicker } from "../components/DepthPicker";
 import type { DepthName, ProjectRecord } from "../types";
 
 export function Projects() {
-  const { user, signIn, logout } = useAuth();
+  const { user, loading: authLoading, signIn, logout } = useAuth();
   const nav = useNavigate();
   const [rows, setRows] = useState<ProjectRecord[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [premise, setPremise] = useState("");
   const [depth, setDepth] = useState<DepthName>("scout");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [delId, setDelId] = useState<string | null>(null);
 
-  useEffect(() => { if (user) listProjects().then(setRows).catch(() => {}); }, [user]);
+  useEffect(() => {
+    if (!user) { setListLoading(false); return; }
+    setListLoading(true);
+    listProjects().then(setRows).catch(() => {}).finally(() => setListLoading(false));
+  }, [user]);
 
   const remove = async (id: string) => {
     setRows((rs) => rs.filter((r) => r.id !== id));
@@ -25,6 +30,12 @@ export function Projects() {
     try { await deleteProject(id); } catch { listProjects().then(setRows).catch(() => {}); }
   };
 
+  if (authLoading) return (
+    <div className="wrap">
+      <header><h1>THE BOXES</h1></header>
+      <p className="muted">Signing you in…</p>
+    </div>
+  );
   if (!user) return <Landing onSignIn={signIn} />;
 
   const start = async () => {
@@ -68,7 +79,8 @@ export function Projects() {
 
       <section>
         <h2>Projects</h2>
-        {rows.map((r) => (
+        {listLoading && <p className="muted">Opening your projects…</p>}
+        {!listLoading && rows.map((r) => (
           <div className="proj" key={r.id}>
             <Link className="proj-main" to={`/p/${r.id}`}>
               <span>{r.premise}</span>
@@ -85,7 +97,7 @@ export function Projects() {
             )}
           </div>
         ))}
-        {!rows.length && <p className="muted">None yet.</p>}
+        {!listLoading && !rows.length && <p className="muted">None yet.</p>}
       </section>
     </div>
   );
