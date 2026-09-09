@@ -196,7 +196,7 @@ export function OverviewTab({
         </section>
       )}
 
-      <section className="risk-grid">
+      <section className={`risk-grid${sideSlot ? "" : " solo"}`}>
         <div className="card">
           <p className="eyebrow">Thin research boxes</p>
           {sorted.slice(0, 3).map((b) => (

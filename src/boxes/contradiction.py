@@ -31,15 +31,41 @@ _TOKEN = re.compile(r"\b(?:[A-Z][A-Za-z'’-]{2,}|1[89]\d{2}|20\d{2})\b")
 _ENTITY_STOP = {
     "The", "This", "That", "These", "Those", "There", "Their", "They", "Then",
     "When", "Where", "Which", "While", "With", "From", "Into", "After", "Before",
-    "During", "Between", "About", "Also", "However", "According", "Source",
+    "During", "Between", "About", "Also", "However", "According", "Source", "Text",
     "Wikipedia", "January", "February", "March", "April", "May", "June", "July",
     "August", "September", "October", "November", "December", "Monday", "Tuesday",
     "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    # Title and citation boilerplate: matched by the capitalised-word pattern but
+    # says nothing about which event a fragment is about.
+    "Country", "Reports", "Report", "Practices", "Human", "Rights", "Department",
+    "State", "Interview", "Biography", "Facts", "Timeline", "Encyclopedia",
+    "University", "Press", "Archive", "Archives", "Documents", "Document",
+    "Office", "Historian", "History", "Overview", "Introduction", "Chapter",
+    "Volume", "Journal", "Review", "Study", "Analysis", "Profile", "Guide",
+    "News", "Article", "Page", "Home", "Search", "Results", "Collection",
+    "Free", "Simple", "English", "PDF",
 }
 
 
 def _salient(text: str) -> set[str]:
     return {t for t in _TOKEN.findall(text or "") if t not in _ENTITY_STOP}
+
+
+# A hard "contradicts" between two hobby or marketing sites is a curiosity, not
+# a research finding. Keep it only when at least one side has some standing.
+_CREDIBLE = (
+    ".gov", ".edu", ".ac.uk", ".ac.za", "wikipedia.org", "britannica.com",
+    "archive.org", "jstor.org", "cambridge.org", "oup.com", "tandfonline.com",
+    "sagepub.com", "springer.com", "muse.jhu.edu", "iupress.org", "dukeupress.edu",
+    "foreignaffairs.com", "bbc.", "reuters.com", "apnews.com", "nytimes.com",
+    "theguardian.com", "washingtonpost.com", "aljazeera.com", "africabib.org",
+    "sahistory.org.za", "hansard", "loc.gov", "history.state.gov",
+)
+
+
+def _credible(domain: str) -> bool:
+    d = (domain or "").lower()
+    return any(tok in d for tok in _CREDIBLE)
 
 
 @dataclass
@@ -149,28 +175,37 @@ def verify(a: Evidence, b: Evidence, similarity: float) -> Verdict:
 
 
 def entity_pairs(
-    evidence: list[Evidence], *, min_docs: int = 2, max_docs: int = 14,
-    min_shared: int = 3, cap: int = 200,
+    evidence: list[Evidence], *, min_docs: int = 2, max_docs: int = 16,
+    min_shared: int = 3, min_distinct: int = 2, distinct_df: int = 6, cap: int = 200,
 ) -> dict[tuple[int, int], int]:
     """Pairs of fragments that share several proper nouns or dates. Two accounts
     that attribute the same event to different actors share the names and dates
     that pin the event, so this reaches contradictions the embedding band
-    misses. Returns {(i, j): shared-entity count}."""
+    misses. A pair also needs a couple of *distinctive* shared names, or every
+    fragment about Zambia pairs with every other. Returns {(i, j): score}."""
     if not evidence:
         return {}
     tok_docs: dict[str, list[int]] = defaultdict(list)
-    frag_ent = [_salient(e.text) for e in evidence]
-    for idx, ents in enumerate(frag_ent):
-        for t in ents:
+    for idx, e in enumerate(evidence):
+        for t in _salient(e.text):
             tok_docs[t].append(idx)
-    shared: dict[tuple[int, int], int] = defaultdict(int)
+    total: dict[tuple[int, int], int] = defaultdict(int)
+    distinct: dict[tuple[int, int], int] = defaultdict(int)
     for t, idxs in tok_docs.items():
-        if not (min_docs <= len(idxs) <= max_docs):
-            continue  # too rare to co-occur, or too generic to mean anything
+        df = len(idxs)
+        if not (min_docs <= df <= max_docs):
+            continue
+        rare = df <= distinct_df
         for a in range(len(idxs)):
             for b in range(a + 1, len(idxs)):
-                shared[(idxs[a], idxs[b])] += 1
-    out = {p: n for p, n in shared.items() if n >= min_shared}
+                p = (idxs[a], idxs[b])
+                total[p] += 1
+                if rare:
+                    distinct[p] += 1
+    out = {
+        p: n for p, n in total.items()
+        if n >= min_shared and distinct.get(p, 0) >= min_distinct
+    }
     return dict(sorted(out.items(), key=lambda kv: -kv[1])[:cap])
 
 
@@ -180,25 +215,42 @@ def find_contradictions(
     *,
     max_checks: int = 24,
     max_workers: int = 4,
+    focus_ids: set[str] | None = None,
 ) -> list[Verdict]:
     """Two candidate sources feed the verifier: the embedding band (same
     subject, mid similarity) and entity anchoring (fragments that share several
     names or dates). The union is ranked so independent sources on the same
     event come first. Each pair's Gemini verdict is independent, so they verify
-    concurrently."""
+    concurrently. `focus_ids` keeps only pairs with at least one endpoint in
+    that set, so a targeted pass stays on its question."""
     if not evidence or vectors is None or len(vectors) < 2:
         return []
     v = np.asarray(vectors, dtype=np.float32)
     v = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-9)
+    focus = {i for i, e in enumerate(evidence) if e.id in focus_ids} if focus_ids else None
 
     ent = entity_pairs(evidence, cap=max_checks * 4)
     band = {(i, j): s for i, j, s in candidate_pairs(vectors, evidence, max_pairs=max_checks * 4)}
 
     doms = [getattr(e, "source_domain", "") for e in evidence]
+    titles = [{w for w in re.findall(r"[a-z]+", (getattr(e, "title", "") or "").lower())
+               if len(w) > 2}
+              for e in evidence]
+
+    def same_series(i: int, j: int) -> bool:
+        a, b = titles[i], titles[j]
+        if len(a) < 4 or len(b) < 4:
+            return False
+        return len(a & b) / len(a | b) >= 0.7  # one publication, different year
+
     scored: list[tuple[float, int, int, float]] = []
     for (i, j) in set(band) | set(ent):
+        if focus is not None and i not in focus and j not in focus:
+            continue
         if evidence[i].url and evidence[i].url == evidence[j].url:
             continue  # same page: a disagreement there is a scraping artefact
+        if same_series(i, j):
+            continue  # an annual report across two years is not a contradiction
         sim = float(v[i] @ v[j])
         cross = 0.18 if (doms[i] and doms[j] and doms[i] != doms[j]) else -0.05
         mid = max(0.0, 1.0 - abs(sim - 0.72) / 0.22)
@@ -213,11 +265,17 @@ def find_contradictions(
         results = list(ex.map(
             lambda p: verify(evidence[p[1]], evidence[p[2]], p[3]), picks
         ))
+    by_id = {e.id: e for e in evidence}
+
+    def has_standing(r: Verdict) -> bool:
+        a, b = by_id.get(r.a_id), by_id.get(r.b_id)
+        return _credible(getattr(a, "source_domain", "")) or _credible(getattr(b, "source_domain", ""))
+
     kept = [r for r in results if r.relation in ("contradicts", "contextualises")]
-    # A real contradiction is the finding. "contextualises" is softer and tends
-    # to accumulate on adjacent-but-not-conflicting pairs, so keep only a few of
-    # the most similar, and put every contradiction first.
-    contra = [r for r in kept if r.relation == "contradicts"]
-    context = sorted((r for r in kept if r.relation == "contextualises"),
+    # A real contradiction is the finding. Drop the ones where neither side has
+    # any standing, and keep only a few "contextualises" notes, contradictions
+    # first.
+    contra = [r for r in kept if r.relation == "contradicts" and has_standing(r)]
+    context = sorted((r for r in kept if r.relation == "contextualises" and has_standing(r)),
                      key=lambda r: -r.similarity)[:4]
     return sorted(contra, key=lambda r: -r.similarity) + context

@@ -4,14 +4,14 @@ import { ResearchConsole, type Progress } from "../components/ResearchConsole";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { DepthPicker } from "../components/DepthPicker";
 import { EvidenceModal } from "../components/EvidenceModal";
-import { Markdown } from "../components/Markdown";
+import { AskDock } from "../components/AskDock";
 import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVerdicts } from "../data";
-import { ask, deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource } from "../api";
+import { deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource } from "../api";
 import {
   DepartmentsTab, EvidenceTab, OverviewTab, PriorArtTab, TAB_IDS, TraceTab,
   conflictMap, pctOf, relationLabel, type TabId,
 } from "../workspace/tabs";
-import type { AskResponse, DepthName, Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
+import type { DepthName, Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
 
 export function Project() {
   const { pid = "" } = useParams();
@@ -30,10 +30,6 @@ export function Project() {
   const [streamLost, setStreamLost] = useState(false);
   const [progress, setProgress] = useState<Progress>({});
   const [liveEv, setLiveEv] = useState<Evidence[]>([]);
-  const [q, setQ] = useState("");
-  const [answer, setAnswer] = useState<AskResponse | null>(null);
-  const [asking, setAsking] = useState(false);
-  const [askErr, setAskErr] = useState("");
   const [selBox, setSelBox] = useState<string | null>(null);
   const [dept, setDept] = useState<string | null>(null);
   const [uploadBox, setUploadBox] = useState("");
@@ -84,17 +80,6 @@ export function Project() {
       });
     } catch (e) { push(`ERROR   ${String((e as Error)?.message || e)}`); }
     finally { setRunning(false); }
-  };
-  const doAsk = async () => {
-    if (!q.trim() || asking) return;
-    setAsking(true); setAskErr(""); setAnswer(null);
-    try { setAnswer(await ask(pid, q.trim())); }
-    catch (e) {
-      const msg = String((e as Error)?.message || e);
-      setAskErr(/no research yet|409/i.test(msg)
-        ? "Nothing is indexed yet. Run the research first."
-        : "The index could not answer. Try again in a moment.");
-    } finally { setAsking(false); }
   };
   const beginEdit = () => { setEditPremise(project?.premise || ""); setEditDepth(project?.depth || "scout"); setEditing(true); };
   const saveEdit = async () => {
@@ -195,33 +180,6 @@ export function Project() {
           conflicts={conflicts}
           onOpen={setModalEv}
           onGoto={goto}
-          sideSlot={
-            <div className="card">
-              <p className="eyebrow">Ask the boxes</p>
-              <div className="ask-compose">
-                <input value={q} onChange={(e) => setQ(e.target.value)} disabled={asking}
-                       placeholder="What would our characters actually see and hear?"
-                       onKeyDown={(e) => e.key === "Enter" && doAsk()} />
-                <button onClick={doAsk} disabled={asking || !q.trim()}>{asking ? "Consulting…" : "Ask"}</button>
-              </div>
-              {askErr && <p className="form-error" role="alert">{askErr}</p>}
-              {answer && (
-                <div className="grounded-answer">
-                  <span className={answer.sufficient ? "source-badge primary" : "source-badge web"}>
-                    {answer.sufficient ? "grounded answer" : "insufficient evidence"}
-                  </span>
-                  <Markdown>{answer.answer}</Markdown>
-                  <div className="answer-sources">
-                    {answer.sources.map((s, i) => (
-                      <button className="src-link" key={s.id || i} onClick={() => setModalEv(s)}>
-                        [{i + 1}] {s.title || s.source_domain}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          }
         />
       )}
 
@@ -298,6 +256,14 @@ export function Project() {
           </div>
         </section>
       </details>
+
+      <AskDock
+        pid={pid}
+        disabled={!boxes.length}
+        conflicts={conflicts}
+        boxName={boxName}
+        onOpenEvidence={setModalEv}
+      />
 
       <EvidenceModal
         evidence={modalEv} boxName={boxName}

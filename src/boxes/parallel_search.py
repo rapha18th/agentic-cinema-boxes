@@ -90,6 +90,27 @@ def _clean(s: str) -> str:
     return _TAG.sub("", s or "").replace("\xa0", " ").strip()
 
 
+# Book-catalogue and bibliographic-database pages extract as nav chrome plus a
+# purchase prompt. They carry a title but no claim, and then dominate the
+# contradiction candidates because every one of them mentions the same subject.
+_STUB_MARKERS = (
+    "request rights and permissions", "download book flyer", "course adoption",
+    "go to database home", "bibliographic database", "add to cart", "add to basket",
+    "add to wishlist", "table of contents", "leiden university catalogue",
+    "request desk copy", "purchase options", "e-book isbn", "eisbn",
+)
+
+
+def _low_value(text: str) -> bool:
+    t = (text or "").lower()
+    if len(t) < 60:
+        return True
+    if sum(1 for m in _STUB_MARKERS if m in t) >= 2:
+        return True
+    letters = sum(c.isalpha() or c.isspace() for c in t)
+    return letters / max(len(t), 1) < 0.5
+
+
 def _headers(key: str) -> dict:
     return {"x-api-key": key, "Content-Type": "application/json"}
 
@@ -503,6 +524,8 @@ def research(
         text = (ex["content"] if ex and ex["content"] else h.text)[:per_source_chars].strip()
         if not text and not h.title:
             continue
+        if _low_value(text):
+            continue  # a library catalogue page or a nav shell, no claims to weigh
         evidence.append(
             Evidence(
                 text=f"{h.title}. {text}".strip(". ").strip() if h.title else text,

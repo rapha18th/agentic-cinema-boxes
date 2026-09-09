@@ -151,6 +151,7 @@ def _probe_disputes(proj: ResearchProject, *, on_event: EventFn, progress) -> No
         return
     progress("cross-examining", round=len(proj.ledger.rounds))
     rn = len(proj.ledger.rounds) + 1
+    dispute_ids: set[str] = set()
     for q in questions:
         try:
             found = ps.research(
@@ -159,11 +160,14 @@ def _probe_disputes(proj: ResearchProject, *, on_event: EventFn, progress) -> No
             )
         except Exception:  # noqa: BLE001
             continue
-        proj._add_evidence(found)
+        fresh = proj._add_evidence(found)
+        dispute_ids.update(e.id for e in fresh)
 
+    if not dispute_ids:
+        return
     max_checks = {"production": 30}.get(proj.depth.name, 50)
     verdicts = contradiction.find_contradictions(
-        proj.evidence, proj.vectors, max_checks=max_checks
+        proj.evidence, proj.vectors, max_checks=max_checks, focus_ids=dispute_ids,
     )
     for v in verdicts:
         if all((v.a_id, v.b_id) != (x.a_id, x.b_id) for x in proj.contradictions):
