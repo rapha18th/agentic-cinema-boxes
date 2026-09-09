@@ -190,6 +190,7 @@ export function Project() {
           boxes={boxes}
           highlights={highlights}
           verdicts={verdicts}
+          evidence={allEvidence}
           reel={reel}
           conflicts={conflicts}
           onOpen={setModalEv}

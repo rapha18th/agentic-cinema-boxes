@@ -433,6 +433,15 @@ button.evcard { width: 100%; text-align: left; font: inherit; text-transform: no
 .verdict.contextualises { border-left-color: var(--context); }
 .verdict b { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; }
 .verdict .muted { font-size: 12px; }
+.verdict-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.verdict-side { display: flex; flex-direction: column; gap: 4px; text-align: left;
+  padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 3px; font: inherit; color: var(--text); }
+button.verdict-side { cursor: pointer; transition: border-color .15s ease; }
+button.verdict-side:hover { border-color: var(--line-strong); }
+.verdict-side-cite { font-size: 11px; color: var(--accent); letter-spacing: .02em; }
+.verdict-side-text { font-size: 12px; line-height: 1.5; color: var(--muted); }
+@media (max-width: 640px) { .verdict-sides { grid-template-columns: 1fr; } }
 
 /* ── answers + reel ───────────────────────────────────────────────── */
 .answer, .beat { border-top: 1px solid var(--line); padding: 12px 0; }

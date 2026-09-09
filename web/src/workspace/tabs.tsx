@@ -60,6 +60,47 @@ export const rankVerdicts = (vs: Verdict[]) =>
     (a.relation === "contradicts" ? 0 : 1) - (b.relation === "contradicts" ? 0 : 1)
     || (b.similarity ?? 0) - (a.similarity ?? 0));
 
+export const evById = (evidence: Evidence[] = []): Record<string, Evidence> =>
+  Object.fromEntries(evidence.map((e) => [e.id, e]));
+
+/** A cross-examination result with both sides shown in full: the explanation,
+ *  then each source as a clickable block with its own text, so the reader can
+ *  see what actually disagrees, not just that something did. */
+export function VerdictCard({
+  v, byId, onOpen,
+}: {
+  v: Verdict;
+  byId: Record<string, Evidence>;
+  onOpen: (e: Evidence) => void;
+}) {
+  const side = (id?: string, cite?: string, label = "") => {
+    const e = id ? byId[id] : undefined;
+    const head = tidy(cite || e?.title || e?.source_domain || "source");
+    if (!e) {
+      return (
+        <div className="verdict-side">
+          <span className="verdict-side-cite">{label}{head}</span>
+        </div>
+      );
+    }
+    return (
+      <button type="button" className="verdict-side" onClick={() => onOpen(e)}>
+        <span className="verdict-side-cite">{label}{head} ↗</span>
+        {e.text && <span className="verdict-side-text">{cleanText(e.text, 260)}</span>}
+      </button>
+    );
+  };
+  return (
+    <div className={`verdict ${v.relation}`}>
+      <b>{relationLabel(v.relation)}</b> · {cleanText(v.explanation, 260)}
+      <div className="verdict-sides">
+        {side(v.a_id, v.a_cite, "A · ")}
+        {side(v.b_id, v.b_cite, "B · ")}
+      </div>
+    </div>
+  );
+}
+
 /* ── evidence cards, multimodal ────────────────────────────────────── */
 export function EvidenceCards({
   items, onOpen, limit, conflicts,
@@ -110,18 +151,20 @@ export function EvidenceCards({
 
 /* ── overview ──────────────────────────────────────────────────────── */
 export function OverviewTab({
-  overview, boxes, highlights, reel, verdicts, onOpen, onGoto, sideSlot, conflicts,
+  overview, boxes, highlights, reel, verdicts, evidence, onOpen, onGoto, sideSlot, conflicts,
 }: {
   overview?: string;
   boxes: ResearchBox[];
   highlights: Evidence[];
   reel?: any[];
   verdicts?: Verdict[];
+  evidence?: Evidence[];
   onOpen: (e: Evidence) => void;
   onGoto?: (tab: TabId, boxId?: string) => void;
   sideSlot?: ReactNode;
   conflicts?: Record<string, Verdict>;
 }) {
+  const byId = evById(evidence);
   const sorted = [...boxes].sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
   return (
     <>
@@ -175,10 +218,7 @@ export function OverviewTab({
             {onGoto && <button className="ghost" onClick={() => onGoto("trace")}>Full trace →</button>}
           </div>
           {rankVerdicts(verdicts).slice(0, 4).map((v, i) => (
-            <div className={`verdict ${v.relation}`} key={v.id || i}>
-              <b>{relationLabel(v.relation)}</b> · {cleanText(v.explanation, 200)}
-              <div className="muted">{tidy(v.a_cite)}  vs  {tidy(v.b_cite)}</div>
-            </div>
+            <VerdictCard key={v.id || i} v={v} byId={byId} onOpen={onOpen} />
           ))}
         </section>
       )}
@@ -383,11 +423,7 @@ export function TraceTab({
       <section className="card">
         <p className="eyebrow">Cross-examined sources</p>
         {rankVerdicts(verdicts).map((v, i) => (
-          <div className={`verdict ${v.relation}`} key={v.id || i}>
-            <b>{relationLabel(v.relation)}</b> · {v.explanation}
-            <div className="muted">A: {v.a_cite}</div>
-            <div className="muted">B: {v.b_cite}</div>
-          </div>
+          <VerdictCard key={v.id || i} v={v} byId={evById(evidence)} onOpen={onOpen} />
         ))}
         {!verdicts.length && <p className="muted">No unresolved conflicts found in this run.</p>}
       </section>

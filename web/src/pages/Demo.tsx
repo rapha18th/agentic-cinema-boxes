@@ -96,6 +96,7 @@ export function Demo() {
           highlights={highlights}
           reel={S.reel}
           verdicts={S.verdicts}
+          evidence={S.evidence}
           conflicts={conflicts}
           onOpen={setModalEv}
           onGoto={goto}
