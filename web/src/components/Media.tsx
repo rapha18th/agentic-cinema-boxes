@@ -32,7 +32,7 @@ export function MediaBit({ e, size = "thumb" }: { e: Ev; size?: "thumb" | "full"
   if (m === "video" && src) {
     // The #t fragment makes the browser seek to and paint an early frame, so
     // the player shows a still instead of a black box before the first play.
-    const vsrc = src.includes("#") ? src : `${src}#t=0.5`;
+    const vsrc = src.includes("#") ? src : `${src}#t=3`;
     return (
       <span className="media-wrap">
         <video className={size === "full" ? "ev-video-full" : "ev-video"} controls
