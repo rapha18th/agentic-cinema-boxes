@@ -48,7 +48,9 @@ export function ResearchConsole({
   errorText?: string;
 }) {
   const p = progress;
-  const phase = PHASE_LABEL[p.phase ?? ""] ?? (p.phase ?? "STANDING BY").toUpperCase();
+  const phase = done
+    ? PHASE_LABEL.done
+    : PHASE_LABEL[p.phase ?? ""] ?? (p.phase ?? "STANDING BY").toUpperCase();
   const objN = (p.objective_index ?? 0) + 1;
   const objT = p.objective_count ?? p.objectives_total ?? 0;
   const round = p.round ?? 0;

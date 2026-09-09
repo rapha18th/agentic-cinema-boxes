@@ -116,8 +116,22 @@ export function Project() {
     </div>
   );
 
-  const shownProgress = streamLost ? { ...progress, ...(project.progress || {}) } as Progress : progress;
   const runDone = !running && (progress.phase === "done" || project.status === "done");
+  const runErr = !running && project.status === "error";
+  // A returning visitor has no live `progress`; fall back to what the run
+  // persisted, and for a finished run use the authoritative final numbers so
+  // the console renders its true end state.
+  const base = streamLost
+    ? { ...progress, ...(project.progress || {}) }
+    : { ...(project.progress || {}), ...progress };
+  const shownProgress = (runDone
+    ? {
+        ...base, phase: "done",
+        confidence: project.confidence ?? base.confidence,
+        coverage: project.coverage ?? base.coverage,
+        evidence: allEvidence.length || base.evidence,
+      }
+    : base) as Progress;
 
   return (
     <div className="wrap workspace">
@@ -224,13 +238,13 @@ export function Project() {
           activityLines={activity}
           stopReason={project.stop_reason}
           consoleSlot={
-            (running || streamLost || progress.phase === "done") ? (
+            (running || streamLost || runDone || runErr) ? (
               <ResearchConsole
                 progress={shownProgress}
                 log={activity}
                 done={runDone}
                 disconnected={streamLost && !runDone}
-                errorText={project.status === "error" ? project.error || "see the decision log" : ""}
+                errorText={runErr ? project.error || "see the decision log" : ""}
               />
             ) : null
           }

@@ -699,6 +699,7 @@ button.verdict-side:hover { border-color: var(--line-strong); }
 .rc-scan { position: absolute; left: 0; right: 0; height: 2px;
   background: color-mix(in srgb, var(--device-amber) 22%, transparent);
   animation: rc-scan 3.4s linear infinite; pointer-events: none; }
+.rc-done .rc-scan { display: none; }
 @keyframes rc-scan { 0% { top: -2px; } 100% { top: 100%; } }
 .rc-head { display: flex; justify-content: space-between; font-size: 11px; opacity: .7; }
 .rc-phase { text-align: center; font-size: 22px; font-weight: 600; letter-spacing: .22em;
