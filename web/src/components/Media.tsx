@@ -27,12 +27,16 @@ export function MediaBit({ e, size = "thumb" }: { e: Ev; size?: "thumb" | "full"
     return <a className="media-chip" href={src} target="_blank" rel="noopener">📄 open document</a>;
   }
   if (m === "audio" && src) {
-    return <span className="media-wrap"><audio className="ev-audio" controls preload="none" src={src} /><More /></span>;
+    return <span className="media-wrap"><audio className="ev-audio" controls preload="metadata" src={src} /><More /></span>;
   }
   if (m === "video" && src) {
+    // The #t fragment makes the browser seek to and paint an early frame, so
+    // the player shows a still instead of a black box before the first play.
+    const vsrc = src.includes("#") ? src : `${src}#t=0.5`;
     return (
       <span className="media-wrap">
-        <video className={size === "full" ? "ev-video-full" : "ev-video"} controls preload="none" src={src} />
+        <video className={size === "full" ? "ev-video-full" : "ev-video"} controls
+               preload="metadata" playsInline src={vsrc} />
         <More />
       </span>
     );
