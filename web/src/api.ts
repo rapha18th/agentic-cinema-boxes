@@ -64,12 +64,39 @@ export async function surveyPriorArt(pid: string) {
   return r.json();
 }
 
-export async function ask(pid: string, question: string) {
+export async function ask(
+  pid: string, question: string, image?: { b64: string; mime: string } | null,
+) {
+  const body: Record<string, unknown> = { question };
+  if (image) { body.image_b64 = image.b64; body.image_mime = image.mime; }
   const r = await fetch(`${BASE}/api/projects/${pid}/ask`, {
-    method: "POST", headers: await headers(), body: JSON.stringify({ question }),
+    method: "POST", headers: await headers(), body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(await r.text());
   return (await r.json()) as AskResponse;
+}
+
+export async function similar(pid: string, evidenceId: string, k = 8) {
+  const r = await fetch(`${BASE}/api/projects/${pid}/similar`, {
+    method: "POST", headers: await headers(),
+    body: JSON.stringify({ evidence_id: evidenceId, k }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json()) as { source_id: string; source_modality: string; matches: any[] };
+}
+
+export async function getWatch(pid: string) {
+  const r = await fetch(`${BASE}/api/projects/${pid}/watch`, { headers: await headers() });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json()) as { enabled: boolean; since?: number; updates: any[] };
+}
+
+export async function setWatch(pid: string, enabled: boolean) {
+  const r = await fetch(`${BASE}/api/projects/${pid}/watch`, {
+    method: "POST", headers: await headers(), body: JSON.stringify({ enabled }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json()) as { monitor_id?: string; status?: string };
 }
 
 export async function uploadResource(pid: string, file: File, objectiveId: string, note: string) {

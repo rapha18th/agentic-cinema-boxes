@@ -98,4 +98,6 @@ export interface AskResponse {
   answer: string;
   sufficient: boolean;
   sources: Evidence[];
+  query_prefix?: string;
+  query_parts?: string[];
 }

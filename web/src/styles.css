@@ -419,11 +419,32 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .askturn-q { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
 .askturn .grounded-answer { margin-top: 8px; padding-top: 10px; }
 .askdock-compose { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
-.askdock-compose input { flex: 1; }
+.askdock-compose input:not([type="file"]) { flex: 1; }
+.askdock-clip { padding: 0 8px; background: none; border: 1px solid var(--line); border-radius: 3px;
+  color: var(--muted); cursor: pointer; }
+.askdock-clip:hover { color: var(--text); }
+.askdock-attach { display: flex; align-items: center; gap: 8px; padding: 6px 14px 0;
+  font: 11px var(--mono); color: var(--muted); }
+.askdock-attach .ghost { padding: 0 4px; }
+.askturn-meta { margin: 6px 0 0; font: 10px var(--mono); color: var(--muted); }
+.askturn-meta code { font-size: 10px; }
 @media (max-width: 640px) {
   .askdock { right: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: 78vh; }
   .askdock-fab { right: 12px; bottom: 12px; }
 }
+.watch-toggle.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+span.watch-toggle { font: 10px var(--mono); letter-spacing: .08em; align-self: center; }
+.modal-foot { display: flex; flex-wrap: wrap; gap: 8px; }
+.modal-similar { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;
+  display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.sim-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; background: none;
+  border: 0; border-bottom: 1px solid var(--line); padding: 8px 0; cursor: pointer; color: var(--text); }
+.sim-row:hover { background: var(--surface-2); }
+.sim-score { font: 11px var(--mono); color: var(--accent); flex: none; padding-top: 2px; }
+.sim-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sim-cite { font: 11px var(--mono); color: var(--link); }
+.sim-snip { font-size: 12px; color: var(--muted); line-height: 1.5;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .risk-grid.solo { grid-template-columns: 1fr; }
 .source-badge { display: inline-block; margin-bottom: 8px; padding: 2px 7px; color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px; font: 9px var(--mono);

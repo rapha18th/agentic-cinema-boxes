@@ -22,20 +22,40 @@ export function AskDock({
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [img, setImg] = useState<{ b64: string; mime: string; name: string } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns, open]);
 
+  const attach = (file: File) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const scale = Math.min(1, 1024 / Math.max(im.width, im.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(im.width * scale); c.height = Math.round(im.height * scale);
+        c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
+        const url = c.toDataURL("image/jpeg", 0.82);
+        setImg({ b64: url.split(",")[1], mime: "image/jpeg", name: file.name });
+      };
+      im.src = String(rd.result);
+    };
+    rd.readAsDataURL(file);
+  };
+
   const send = async () => {
     const question = q.trim();
     if (!question || busy) return;
-    setQ("");
+    const shot = img;
+    setQ(""); setImg(null);
     setBusy(true);
-    setTurns((t) => [...t, { q: question }]);
+    setTurns((t) => [...t, { q: shot ? `${question}  ·  📎 ${shot.name}` : question }]);
     try {
-      const res = await ask(pid, question);
+      const res = await ask(pid, question, shot ? { b64: shot.b64, mime: shot.mime } : null);
       setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, res } : x)));
     } catch (e) {
       const msg = String((e as Error)?.message || e);
@@ -80,6 +100,11 @@ export function AskDock({
                       {t.res.sufficient ? "grounded answer" : "insufficient evidence"}
                     </span>
                     <Markdown>{t.res.answer}</Markdown>
+                    {t.res.query_parts?.includes("image") && (
+                      <p className="askturn-meta">
+                        query: text + image · prefix <code>{t.res.query_prefix}</code>
+                      </p>
+                    )}
                     <AnswerSources sources={t.res.sources} conflicts={conflicts}
                                    boxName={boxName} onOpen={onOpenEvidence} />
                   </div>
@@ -89,9 +114,19 @@ export function AskDock({
             ))}
           </div>
 
+          {img && (
+            <div className="askdock-attach">
+              📎 {img.name}
+              <button className="ghost" onClick={() => setImg(null)} aria-label="Remove image">✕</button>
+            </div>
+          )}
           <div className="askdock-compose">
+            <button type="button" className="askdock-clip" aria-label="Attach a reference image"
+                    onClick={() => fileRef.current?.click()} disabled={busy}>📎</button>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden
+                   onChange={(e) => e.target.files?.[0] && attach(e.target.files[0])} />
             <input value={q} onChange={(e) => setQ(e.target.value)} disabled={busy}
-                   placeholder="What would our characters actually see and hear?"
+                   placeholder={img ? "Describe what you want matched" : "What would our characters actually see and hear?"}
                    onKeyDown={(e) => e.key === "Enter" && send()} />
             <button onClick={send} disabled={busy || !q.trim()}>{busy ? "…" : "Ask"}</button>
           </div>

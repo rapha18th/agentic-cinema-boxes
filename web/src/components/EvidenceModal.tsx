@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MediaBit } from "./Media";
 import { Markdown } from "./Markdown";
+import { similar } from "../api";
 
 /** Clicks landing on nested interactive controls (a citation link, an audio
  *  scrubber, a button) should operate normally, not also open the modal. */
@@ -19,14 +20,31 @@ function citationLabel(e: any): string {
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function EvidenceModal({
-  evidence, boxName, onClose, conflict,
+  evidence, boxName, onClose, conflict, pid, onOpenEvidence,
 }: {
   evidence: any | null;
   boxName?: Record<string, string>;
   onClose: () => void;
   conflict?: { relation: string; explanation: string; a_cite: string; b_cite: string; a_id?: string; b_id?: string } | null;
+  pid?: string;
+  onOpenEvidence?: (e: any) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [sim, setSim] = useState<{ busy: boolean; matches: any[]; err?: string } | null>(null);
+
+  useEffect(() => { setSim(null); }, [evidence?.id]);
+
+  const findSimilar = async () => {
+    if (!pid || !evidence?.id) return;
+    setSim({ busy: true, matches: [] });
+    try {
+      const res = await similar(pid, evidence.id);
+      setSim({ busy: false, matches: res.matches });
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      setSim({ busy: false, matches: [], err: /409/.test(msg) ? "No vector for this fragment yet." : "The index could not answer." });
+    }
+  };
 
   useEffect(() => {
     if (!evidence) return;
@@ -89,9 +107,31 @@ export function EvidenceModal({
           {evidence.license_note && <div><span className="modal-meta-k">license</span>{evidence.license_note}</div>}
         </div>
 
-        {evidence.url && (
-          <div className="modal-foot">
+        <div className="modal-foot">
+          {evidence.url && (
             <a className="ghost" href={evidence.url} target="_blank" rel="noopener">Open original source ↗</a>
+          )}
+          {pid && (
+            <button type="button" className="ghost" onClick={findSimilar} disabled={sim?.busy}>
+              {sim?.busy ? "Searching…" : "Find similar across the archive"}
+            </button>
+          )}
+        </div>
+
+        {sim && !sim.busy && (
+          <div className="modal-similar">
+            {sim.err && <p className="muted">{sim.err}</p>}
+            {!sim.err && !sim.matches.length && <p className="muted">Nothing close enough in the archive.</p>}
+            {sim.matches.map((m) => (
+              <button type="button" key={m.id} className="sim-row"
+                      onClick={() => onOpenEvidence?.(m)}>
+                <span className="sim-score">{(m.score ?? 0).toFixed(2)}</span>
+                {m.modality && m.modality !== "text"
+                  ? <span className="sim-body"><MediaBit e={m} size="full" /><span className="sim-cite">{m.citation}</span></span>
+                  : <span className="sim-body"><span className="sim-cite">{m.citation}</span>
+                      <span className="sim-snip">{String(m.text || "").slice(0, 140)}</span></span>}
+              </button>
+            ))}
           </div>
         )}
       </div>

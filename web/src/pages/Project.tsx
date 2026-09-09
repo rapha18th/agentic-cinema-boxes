@@ -5,6 +5,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { DepthPicker } from "../components/DepthPicker";
 import { EvidenceModal } from "../components/EvidenceModal";
 import { AskDock } from "../components/AskDock";
+import { WatchToggle } from "../components/WatchToggle";
 import { useBoxes, useEvidence, usePriorArt, useProject, useReel, useRuns, useVerdicts } from "../data";
 import { deleteProject, downloadReport, runProject, surveyPriorArt, updateProject, uploadResource } from "../api";
 import {
@@ -151,6 +152,7 @@ export function Project() {
           <div className="hero-actions">
             <button onClick={start} disabled={running}>{running ? "Researching…" : runs.length ? "Refresh research" : "Start research"}</button>
             <button className="ghost" onClick={getReport} disabled={reporting}>{reporting ? "Building…" : "Download dossier"}</button>
+            {runDone && <WatchToggle pid={pid} />}
             <button className="ghost" onClick={beginEdit}>Edit</button>
           </div>
         </section>
@@ -266,8 +268,9 @@ export function Project() {
       />
 
       <EvidenceModal
-        evidence={modalEv} boxName={boxName}
+        evidence={modalEv} boxName={boxName} pid={pid}
         conflict={modalEv ? conflicts[modalEv.id] : null}
+        onOpenEvidence={setModalEv}
         onClose={() => setModalEv(null)}
       />
     </div>
