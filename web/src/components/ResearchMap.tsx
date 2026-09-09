@@ -251,8 +251,25 @@ function MapCanvas({
     ? { left: `${((hover.x - view.x) / view.w) * 100}%`, top: `${((hover.y - view.y) / view.h) * 100}%` }
     : null;
 
+  const tally = dots.reduce<Record<string, number>>((a, d) => {
+    const m = d.e.modality || "text";
+    a[m] = (a[m] || 0) + 1;
+    return a;
+  }, {});
+  const LEGEND: [string, string, string][] = [
+    ["text", "·", "text"], ["image", "▣", "image"], ["pdf", "▤", "pdf"],
+    ["audio", "♪", "audio"], ["video", "▶", "video"],
+  ];
+
   return (
     <div className={`map-wrap${fullscreen ? " map-wrap-fs" : ""}`} ref={wrapRef}>
+      <div className="map-legend" aria-hidden="true">
+        {LEGEND.map(([k, g, label]) => (
+          <span key={k} className={tally[k] ? "on" : ""}>
+            <b>{g}</b> {label}{tally[k] ? ` ${tally[k]}` : ""}
+          </span>
+        ))}
+      </div>
       <div className="map-controls">
         <button type="button" className="map-btn" title="Zoom in" aria-label="Zoom in"
                 onClick={() => zoomAt(1 / 1.3)}>+</button>
@@ -276,6 +293,10 @@ function MapCanvas({
             <stop offset="55%" stopColor="var(--map-bg)" />
             <stop offset="100%" stopColor="var(--map-edge)" />
           </radialGradient>
+          <filter id="map-glow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
           {dots.filter((d) => d.isImg).map((d) => (
             <clipPath id={`c-${d.e.id}`} key={d.e.id}><circle cx={d.x} cy={d.y} r={9} /></clipPath>
           ))}
@@ -363,18 +384,22 @@ function MapCanvas({
                 {hit}
                 {ring}
                 <image href={d.thumb} x={d.x - 9} y={d.y - 9} width={18} height={18}
-                       clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice" />
-                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1} pointerEvents="none" />
+                       clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice"
+                       filter="url(#map-glow)" />
+                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1.4} pointerEvents="none" />
               </g>
             );
           }
           if (d.glyph) {
+            // Audio, video, and PDF fragments carry a filled marker in the box
+            // colour with a soft glow, so the multimodal payoff reads at a glance.
             return (
-              <g key={i} {...common}>
+              <g key={i} {...common} filter="url(#map-glow)">
                 {hit}
                 {ring}
-                <text x={d.x} y={d.y + 3} textAnchor="middle" fontSize={11} fill={d.color}
-                      pointerEvents="none">{d.glyph}</text>
+                <circle cx={d.x} cy={d.y} r={6.4} fill={d.color} opacity={0.95} pointerEvents="none" />
+                <text x={d.x} y={d.y + 3.1} textAnchor="middle" fontSize={8.5}
+                      fill="var(--map-edge)" fontWeight={700} pointerEvents="none">{d.glyph}</text>
               </g>
             );
           }

@@ -3,6 +3,7 @@ import { ResearchMap } from "../components/ResearchMap";
 import { Ledger } from "../components/Ledger";
 import { MediaBit } from "../components/Media";
 import { isInteractiveClick } from "../components/EvidenceModal";
+import { BoxModal } from "../components/BoxModal";
 import { DEPARTMENTS, DEPT_LABEL } from "../departments";
 import type { Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
 
@@ -367,7 +368,12 @@ export function EvidenceTab({
 }
 
 /* ── trace: decision timeline, ledger, verdicts ───────────────────── */
-type Step = { label: string; detail: string; kind?: string };
+type Step = { label: string; detail: string; kind?: string; box?: ResearchBox };
+
+const boxByName = (boxes: ResearchBox[], name: string) => {
+  const n = name.trim().toLowerCase();
+  return boxes.find((b) => (b.name || "").trim().toLowerCase() === n);
+};
 
 export function deriveTimeline(
   runs: ResearchRun[], verdicts: Verdict[], boxes: ResearchBox[], stopReason?: string,
@@ -382,7 +388,11 @@ export function deriveTimeline(
       detail: `${r.sources_examined ?? 0} sources examined · ${r.sources_extracted ?? 0} extracted · ${r.evidence_indexed ?? 0} fragments kept`,
     });
     (r.new_boxes || []).forEach((nb) =>
-      steps.push({ label: "Opened a box", detail: `${nb}, a signal that kept recurring across the evidence`, kind: "new" }));
+      steps.push({
+        label: "Opened a box",
+        detail: `${nb}, a signal that kept recurring across the evidence`,
+        kind: "new", box: boxByName(boxes, nb),
+      }));
   });
   verdicts.forEach((v) =>
     steps.push({ label: `Cross-examined · ${relationLabel(v.relation)}`, detail: `${v.a_cite}  vs  ${v.b_cite}` }));
@@ -402,8 +412,15 @@ export function TraceTab({
   consoleSlot?: ReactNode;
   stopReason?: string;
 }) {
+  const [boxModal, setBoxModal] = useState<ResearchBox | null>(null);
   const steps: Step[] = activityLines?.length
-    ? activityLines.map((line, i) => ({ label: String(i + 1).padStart(2, "0"), detail: line }))
+    ? activityLines.map((line, i) => {
+        const m = line.match(/opened\s+(.+?)\s+·/i);
+        return {
+          label: String(i + 1).padStart(2, "0"), detail: line,
+          ...(m ? { kind: "new", box: boxByName(boxes, m[1]) } : {}),
+        };
+      })
     : deriveTimeline(runs, verdicts, boxes, stopReason);
   return (
     <>
@@ -413,7 +430,15 @@ export function TraceTab({
           <p className="eyebrow">Agent decisions</p>
           <div className="decision-timeline">
             {steps.length ? steps.map((s, i) => (
-              <div key={i} className={s.kind || ""}><b>{s.label}</b><p>{s.detail}</p></div>
+              s.box ? (
+                <button key={i} type="button" className={`timeline-open ${s.kind || ""}`}
+                        onClick={() => setBoxModal(s.box!)}>
+                  <b>{s.label}</b><p>{s.detail}</p>
+                  <span className="timeline-open-cue">open box ↗</span>
+                </button>
+              ) : (
+                <div key={i} className={s.kind || ""}><b>{s.label}</b><p>{s.detail}</p></div>
+              )
             )) : (
               <div><b>Standing by</b>
                 <p>Start a run to see every search, gap, verification, and stopping decision.</p></div>
@@ -432,6 +457,8 @@ export function TraceTab({
         ))}
         {!verdicts.length && <p className="muted">No unresolved conflicts found in this run.</p>}
       </section>
+      <BoxModal box={boxModal} evidence={evidence}
+                onClose={() => setBoxModal(null)} onOpenEvidence={onOpen} />
     </>
   );
 }

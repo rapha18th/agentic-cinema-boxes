@@ -238,10 +238,13 @@ def _do_round(
         queries_by_id = ontology.objective_queries_batch(
             targets, proj.premise, k=d.queries_per_objective
         )
+        # Pictures and documents cap at 2 per objective; audio and video get a
+        # higher ceiling because open recordings are scarce, so a run should
+        # take every one it can reach.
         per_obj_budget = {
-            k: min(2, total) for k, total in {
-                "img": d.images_per_round, "doc": d.docs_per_round, "av": d.av_per_round,
-            }.items()
+            "img": min(2, d.images_per_round),
+            "doc": min(2, d.docs_per_round),
+            "av": min(4, d.av_per_round),
         }
         for obj in targets:
             qs = queries_by_id.get(obj.id) or [f"{obj.name.lower()} {proj.premise}"]

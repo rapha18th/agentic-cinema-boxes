@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ask } from "../api";
 import { Markdown } from "./Markdown";
 import { MediaBit } from "./Media";
@@ -68,7 +69,10 @@ export function AskDock({
     }
   };
 
-  return (
+  // Rendered through a portal to <body>: the workspace shell runs a `rise`
+  // animation that keeps a transform on it, which would otherwise trap this
+  // fixed element inside the scrolling page instead of the viewport.
+  return createPortal(
     <>
       <button className="askdock-fab" aria-label={open ? "Close ask" : "Ask the boxes"}
               aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -132,7 +136,8 @@ export function AskDock({
           </div>
         </section>
       )}
-    </>
+    </>,
+    document.body,
   );
 }
 

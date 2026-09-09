@@ -453,13 +453,23 @@ span.watch-toggle { font: 10px var(--mono); letter-spacing: .08em; align-self: c
 .source-badge.director { color: var(--accent); }
 .source-badge.documentary { color: var(--link); }
 .decision-timeline { border-left: 1px solid var(--line-strong); margin-left: 7px; }
-.decision-timeline > div { position: relative; padding: 0 0 17px 20px; }
-.decision-timeline > div::before { content: ""; position: absolute; left: -4px; top: 4px;
-  width: 7px; height: 7px; background: var(--surface); border: 1px solid var(--muted); border-radius: 50%; }
-.decision-timeline > div.new::before { border-color: var(--accent); background: var(--accent); }
-.decision-timeline > div.done::before { border-color: var(--ok); background: var(--ok); }
+.decision-timeline > div, .decision-timeline > button { position: relative; padding: 0 0 17px 20px;
+  display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0;
+  color: var(--text); text-transform: none; letter-spacing: 0; font: inherit; }
+.decision-timeline > div::before, .decision-timeline > button::before { content: ""; position: absolute;
+  left: -4px; top: 4px; width: 7px; height: 7px; background: var(--surface);
+  border: 1px solid var(--muted); border-radius: 50%; }
+.decision-timeline > .new::before { border-color: var(--accent); background: var(--accent); }
+.decision-timeline > .done::before { border-color: var(--ok); background: var(--ok); }
 .decision-timeline b { font: 600 11px var(--mono); letter-spacing: .08em; }
 .decision-timeline p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.decision-timeline > button.timeline-open { cursor: pointer; }
+.decision-timeline > button.timeline-open:hover { filter: none; transform: none; }
+.decision-timeline > button.timeline-open:hover b { color: var(--accent); }
+.timeline-open-cue { display: inline-block; margin-top: 4px; font: 9px var(--mono);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.decision-timeline > button.timeline-open:hover .timeline-open-cue { color: var(--accent); }
+.box-modal-ev { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
 .edit-warning { color: var(--muted); font-size: 12px; }
 .danger-disclosure { margin-top: 32px; color: var(--muted); }
 .danger-disclosure > summary { cursor: pointer; font: 10px var(--mono); letter-spacing: .1em;
@@ -646,6 +656,13 @@ button.verdict-side:hover { border-color: var(--line-strong); }
 /* ── research map ─────────────────────────────────────────────────── */
 .map-wrap { position: relative; }
 .map-caption { margin: 8px 0 0; font-size: 12px; line-height: 1.5; max-width: 62ch; }
+.map-legend { position: absolute; left: 8px; bottom: 8px; z-index: 2; display: flex; flex-wrap: wrap;
+  gap: 4px 10px; max-width: calc(100% - 80px); padding: 6px 9px; border-radius: 4px;
+  background: color-mix(in srgb, var(--map-bg) 82%, transparent); border: 1px solid var(--map-grid); }
+.map-legend span { font: 9px var(--mono); letter-spacing: .06em; color: var(--map-ink); opacity: .35; }
+.map-legend span.on { opacity: .95; }
+.map-legend b { font-size: 11px; color: var(--map-accent); }
+.map-fullscreen .map-legend { left: 20px; bottom: 20px; }
 .map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 4px;
   background: var(--map-bg); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .map.grabbing { cursor: grabbing; }
