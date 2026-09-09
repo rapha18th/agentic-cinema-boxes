@@ -70,7 +70,7 @@ export function Project() {
         else if (ev.type === "disconnect") { setStreamLost(true); push(`FEED LOST · ${ev.reason}; saved progress remains live`); }
         else if (ev.type === "evidence") { setLiveEv((cur) => [...cur, ...ev.items]); push(`KEPT    ${ev.items.length} fragments · ${ev.objective}`); }
         else if (ev.type === "search") push(`SEARCH  ${ev.objective} · ${ev.queries?.[0] || ""}`);
-        else if (ev.type === "extract") push(`EXTRACT ${ev.objective} · ${ev.sources} sources · ${ev.rejected ?? 0} rejected`);
+        else if (ev.type === "extract") push(`EXTRACT ${ev.objective} · ${ev.results ?? 0} results · ${ev.sources} kept · ${ev.rejected ?? 0} thin · extract ${ev.extract_status || "—"} · ${ev.latency_ms ?? 0}ms`);
         else if (ev.type === "coverage") push(`MEASURE ${ev.summary}`);
         else if (ev.type === "emergent_gap") push(`DECIDE  opened ${ev.objective.name} · a recurring cross-box signal`);
         else if (ev.type === "contradiction") push(`VERIFY  ${relationLabel(ev.verdict.relation)} · ${ev.verdict.a_cite} vs ${ev.verdict.b_cite}`);

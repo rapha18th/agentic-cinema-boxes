@@ -22,7 +22,7 @@ import numpy as np
 from . import contradiction, coverage, ontology
 from . import parallel_search as ps
 from .depth import Depth, get as get_depth
-from .embeddings import embed_texts
+from .embeddings import embed_texts, TASK_SEARCH
 from .evidence import Evidence
 from .ledger import Ledger, RoundRecord
 from .ontology import Objective
@@ -223,17 +223,18 @@ def _do_round(
             on_event({"type": "search", "objective": obj.name, "queries": qs})
             rec.searches.append({"objective": obj.name, "queries": qs})
 
-        def _research_one(obj: Objective) -> tuple[Objective, list[Evidence]]:
+        def _research_one(obj: Objective) -> tuple[Objective, list[Evidence], dict]:
             qs = queries_by_id.get(obj.id) or [f"{obj.name.lower()} {proj.premise}"]
+            tr: dict = {}
             found = ps.research(
                 obj.description or obj.name, qs,
                 objective_id=obj.id, extract_urls=d.extract_urls,
                 full_content=d.full_content, round_no=run_no,
                 harvest_images=per_obj_budget["img"], harvest_docs=per_obj_budget["doc"],
                 harvest_av=per_obj_budget["av"],
-                media_key=f"{obj.name} {proj.premise}",
+                media_key=f"{obj.name} {proj.premise}", trace=tr,
             )
-            return obj, found
+            return obj, found, tr
 
         # Objectives are independent research tasks; run them concurrently and
         # stream results in completion order so the live console keeps moving
@@ -242,7 +243,7 @@ def _do_round(
         with ThreadPoolExecutor(max_workers=min(3, n_targets)) as ex:
             futures = [ex.submit(_research_one, obj) for obj in targets]
             for fut in as_completed(futures):
-                obj, found = fut.result()
+                obj, found, tr = fut.result()
                 progress("researching", round=run_no, objective=obj.name,
                          objective_index=completed, objective_count=n_targets)
                 completed += 1
@@ -251,7 +252,11 @@ def _do_round(
                 n_media = len(found) - n_text
                 on_event({"type": "extract", "objective": obj.name, "sources": n_text,
                           "images": by_mod.get("image", 0), "docs": by_mod.get("pdf", 0),
-                          "av": by_mod.get("audio", 0) + by_mod.get("video", 0)})
+                          "av": by_mod.get("audio", 0) + by_mod.get("video", 0),
+                          "rejected": tr.get("rejected", 0),
+                          "results": tr.get("search_results", 0),
+                          "extract_status": tr.get("extract_status", ""),
+                          "latency_ms": round(tr.get("search_ms", 0) + tr.get("extract_ms", 0))})
                 fresh = proj._add_evidence(found)
                 if fresh:
                     on_event({"type": "evidence", "objective": obj.name,
@@ -261,8 +266,15 @@ def _do_round(
                 rec.images_indexed += by_mod.get("image", 0)
                 rec.media_indexed += n_media - by_mod.get("image", 0)
                 rec.sources_extracted += min(d.extract_urls, n_text)
+                rec.search_ms += tr.get("search_ms", 0.0)
+                rec.extract_ms += tr.get("extract_ms", 0.0)
+                rec.results_returned += tr.get("search_results", 0)
+                rec.rejected += tr.get("rejected", 0)
+                rec.extract_status = tr.get("extract_status") or rec.extract_status
                 if obj.emergent:
                     rec.new_boxes.append(obj.name)
+
+        rec.query_prefix = TASK_SEARCH
 
     # --- contradictions: candidates by embedding, verdicts by Gemini --- #
     progress("verifying", round=run_no)

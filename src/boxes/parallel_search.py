@@ -22,6 +22,7 @@ Contracts (Parallel API v1):
 from __future__ import annotations
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
@@ -122,6 +123,18 @@ def _headers(key: str) -> dict:
     return {"x-api-key": key, "Content-Type": "application/json"}
 
 
+def _note(trace: dict | None, **kw) -> None:
+    """Accumulate per-call Parallel telemetry onto an optional trace dict.
+    Numbers add up across the objectives of a round; strings overwrite."""
+    if trace is None:
+        return
+    for k, v in kw.items():
+        if isinstance(v, str):
+            trace[k] = v
+        else:
+            trace[k] = trace.get(k, 0) + v
+
+
 # The SDK always talks to api.parallel.ai. Tests point PARALLEL_SEARCH_URL at a
 # local stub, so when the URL is redirected the raw httpx path runs instead.
 _SDK_BASE_URL = "https://api.parallel.ai/v1/search"
@@ -162,36 +175,44 @@ def search(
     mode: str = "fast",
     max_results: int = 10,
     timeout: float = 45.0,
+    trace: dict | None = None,
 ) -> list[SearchHit]:
     key = config.parallel_api_key()
     if not key:
         return _stub(query, max_results)
 
+    t0 = time.perf_counter()
+    hits: list[SearchHit] = []
+    transport = "http"
     client = _client(key)
     if client is not None:
         try:
-            return _sdk_search(client, query, objective, extra_queries, mode, max_results)
+            hits = _sdk_search(client, query, objective, extra_queries, mode, max_results)
+            transport = "sdk"
         except Exception:
-            pass  # fall through to the raw request below
+            hits, transport = [], "http"  # fall through to the raw request below
 
-    body = {
-        "objective": objective or query,
-        "search_queries": [query, *(extra_queries or [])],
-        "mode": mode,
-    }
-    resp = httpx.post(_SEARCH_URL, headers=_headers(key), json=body, timeout=timeout)
-    resp.raise_for_status()
-    hits: list[SearchHit] = []
-    for it in resp.json().get("results", []):
-        hits.append(
+    if transport != "sdk":
+        body = {
+            "objective": objective or query,
+            "search_queries": [query, *(extra_queries or [])],
+            "mode": mode,
+        }
+        resp = httpx.post(_SEARCH_URL, headers=_headers(key), json=body, timeout=timeout)
+        resp.raise_for_status()
+        hits = [
             SearchHit(
                 title=_clean(it.get("title", "")),
                 url=it.get("url", ""),
                 text=_clean("\n\n".join(it.get("excerpts") or [])),
                 publish_date=it.get("publish_date"),
             )
-        )
-    return hits[:max_results]
+            for it in resp.json().get("results", [])
+        ][:max_results]
+
+    _note(trace, search_ms=(time.perf_counter() - t0) * 1000,
+          search_results=len(hits), search_transport=transport)
+    return hits
 
 
 def _sdk_search(client, query, objective, extra_queries, mode, max_results):
@@ -224,48 +245,59 @@ def extract(
     full_content: bool = True,
     max_chars_total: int | None = 40_000,
     timeout: float = 45.0,
+    trace: dict | None = None,
 ) -> list[dict]:
     key = config.parallel_api_key()
     if not key or not urls:
+        _note(trace, extract_status="skipped")
         return []
+
+    t0 = time.perf_counter()
+    out: list[dict] = []
+    status = "ok"
 
     client = _client(key)
+    used_sdk = False
     if client is not None:
         try:
-            return _sdk_extract(
+            out = _sdk_extract(
                 client, urls, objective, search_queries, full_content, max_chars_total
             )
+            used_sdk = True
         except Exception:
-            pass  # fall through to the raw request below
+            used_sdk = False  # fall through to the raw request below
 
-    body: dict = {
-        "urls": urls[:20],
-        "objective": objective,
-        "search_queries": search_queries or [],
-        "advanced_settings": {"full_content": True} if full_content else {},
-    }
-    if max_chars_total:
-        body["max_chars_total"] = max_chars_total
-    try:
-        resp = httpx.post(_EXTRACT_URL, headers=_headers(key), json=body, timeout=timeout)
-        resp.raise_for_status()
-        payload = resp.json()
-    except (httpx.HTTPError, ValueError):
-        # Extract is an enrichment step. If it fails, the caller falls back to
-        # search excerpts so a research pass still produces evidence.
-        return []
-    out: list[dict] = []
-    for it in payload.get("results", []):
-        raw = it.get("full_content") or "\n\n".join(it.get("excerpts") or [])
-        out.append(
-            {
-                "url": it.get("url", ""),
-                "title": _clean(it.get("title", "")),
-                "publish_date": it.get("publish_date"),
-                "content": _clean(raw),
-                "raw": raw[:60_000],  # kept unstripped so image markdown survives
-            }
-        )
+    if not used_sdk:
+        body: dict = {
+            "urls": urls[:20],
+            "objective": objective,
+            "search_queries": search_queries or [],
+            "advanced_settings": {"full_content": True} if full_content else {},
+        }
+        if max_chars_total:
+            body["max_chars_total"] = max_chars_total
+        try:
+            resp = httpx.post(_EXTRACT_URL, headers=_headers(key), json=body, timeout=timeout)
+            resp.raise_for_status()
+            payload = resp.json()
+            for it in payload.get("results", []):
+                raw = it.get("full_content") or "\n\n".join(it.get("excerpts") or [])
+                out.append({
+                    "url": it.get("url", ""),
+                    "title": _clean(it.get("title", "")),
+                    "publish_date": it.get("publish_date"),
+                    "content": _clean(raw),
+                    "raw": raw[:60_000],  # kept unstripped so image markdown survives
+                })
+        except (httpx.HTTPError, ValueError):
+            # Extract is an enrichment step. If it fails, the caller falls back
+            # to search excerpts so a research pass still produces evidence.
+            status = "error"
+
+    if status == "ok" and not out:
+        status = "empty"
+    _note(trace, extract_ms=(time.perf_counter() - t0) * 1000,
+          extract_count=len(out), extract_status=status)
     return out
 
 
@@ -581,13 +613,15 @@ def research(
     harvest_docs: int = 0,
     harvest_av: int = 0,
     media_key: str = "",
+    trace: dict | None = None,
 ) -> list[Evidence]:
     """One research pass: search the objective, extract the top sources, harvest a
     few pictures, documents, and recordings, and return evidence with provenance."""
+    tr = trace if trace is not None else {}
     seen: dict[str, SearchHit] = {}
     for q in queries:
         try:
-            hits_q = search(q, objective=objective, mode=mode, max_results=8)
+            hits_q = search(q, objective=objective, mode=mode, max_results=8, trace=tr)
         except httpx.HTTPError:
             hits_q = []
         for h in hits_q:
@@ -599,7 +633,8 @@ def research(
 
     top_urls = [h.url for h in hits[:extract_urls]]
     extracted_list = extract(
-        top_urls, objective=objective, search_queries=queries, full_content=full_content,
+        top_urls, objective=objective, search_queries=queries,
+        full_content=full_content, trace=tr,
     )
     extracted = {e["url"]: e for e in extracted_list}
 
@@ -608,8 +643,10 @@ def research(
         ex = extracted.get(h.url)
         text = (ex["content"] if ex and ex["content"] else h.text)[:per_source_chars].strip()
         if not text and not h.title:
+            tr["rejected"] = tr.get("rejected", 0) + 1
             continue
         if _low_value(text):
+            tr["rejected"] = tr.get("rejected", 0) + 1
             continue  # a library catalogue page or a nav shell, no claims to weigh
         evidence.append(
             Evidence(

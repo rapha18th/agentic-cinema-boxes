@@ -16,6 +16,13 @@ interface Run {
   conflicts?: string[];
   searches?: { objective: string; queries: string[] }[];
   next_action?: string;
+  search_ms?: number;
+  extract_ms?: number;
+  results_returned?: number;
+  rejected?: number;
+  extract_status?: string;
+  query_prefix?: string;
+  index_prefix?: string;
 }
 interface Ev {
   id: string;
@@ -33,6 +40,10 @@ interface Ev {
 
 const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`;
 
+function safeHost(url: string) {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
 function cite(e: Ev) {
   return [e.title || e.source_domain || e.url, e.publish_date]
     .filter(Boolean).join(" · ").replace(/\s*[—–]\s*/g, ", ");
@@ -40,7 +51,7 @@ function cite(e: Ev) {
 
 /** Strip the markdown/wiki syntax that leaks through raw scraped text so a
  *  one-line preview reads as a sentence, not a source dump. */
-function snippet(text?: string) {
+function snippet(text?: string, max = 90) {
   const clean = (text || "")
     .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, "$1") // [[wiki links]]
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [md links](url)
@@ -48,7 +59,7 @@ function snippet(text?: string) {
     .replace(/\{\{[^}]*\}\}/g, "") // {{templates}}
     .replace(/\s+/g, " ")
     .trim();
-  return clean.length > 90 ? `${clean.slice(0, 90)}…` : clean;
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 export function Ledger({
@@ -79,6 +90,19 @@ export function Ledger({
                   {!!r.media_indexed && <> · {r.media_indexed} docs/av</>}
                   {!!r.sources_extracted && <> · {r.sources_extracted} via Extract</>}
                 </div>
+                {r.search_ms != null && (
+                  <div className="muted">
+                    Parallel · {Math.round(r.search_ms)} ms search · {Math.round(r.extract_ms ?? 0)} ms extract
+                    {" · "}{r.results_returned ?? 0} results returned
+                    {" · extract "}{r.extract_status || "—"}
+                    {r.rejected ? ` · ${r.rejected} thin fragments dropped` : ""}
+                  </div>
+                )}
+                {r.query_prefix && (
+                  <div className="muted">
+                    Gemini Embedding 2 · query prefix <code>{r.query_prefix}</code> · documents indexed {r.index_prefix || "(none)"}
+                  </div>
+                )}
                 <div>coverage {pct(r.coverage_before)} → {pct(r.coverage_after)}</div>
                 {!!r.new_boxes?.length && (
                   <div className="new">opened: {r.new_boxes.join(", ")}</div>
@@ -98,12 +122,19 @@ export function Ledger({
                     <summary>{mine.length} evidence items this round</summary>
                     <div className="round-ev-list">
                       {mine.map((e) => (
-                        <button type="button" className="ev-row-compact" key={e.id}
-                                onClick={() => onOpenEvidence(e)}>
+                        <div role="button" tabIndex={0} className="ev-row-compact" key={e.id}
+                             onClick={() => onOpenEvidence(e)}
+                             onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") onOpenEvidence(e); }}>
                           <span className="ev-row-modality">{MODALITY_GLYPH[e.modality || "text"] || "·"}</span>
                           <span className="ev-row-cite">{cite(e)}</span>
-                          <span className="ev-row-snip">{snippet(e.text)}</span>
-                        </button>
+                          <span className="ev-row-snip">{snippet(e.text, 160)}</span>
+                          {e.url && (
+                            <a className="ev-row-src" href={e.url} target="_blank" rel="noopener"
+                               onClick={(ev) => ev.stopPropagation()}>
+                              {e.source_domain || safeHost(e.url)} ↗
+                            </a>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </details>

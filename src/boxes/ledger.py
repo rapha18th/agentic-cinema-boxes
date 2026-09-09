@@ -25,6 +25,15 @@ class RoundRecord:
     searches: list[dict] = field(default_factory=list)  # [{objective, queries}]
     next_action: str = ""
     at: float = field(default_factory=time.time)
+    # Parallel call telemetry, summed across the round's objectives
+    search_ms: float = 0.0
+    extract_ms: float = 0.0
+    results_returned: int = 0
+    rejected: int = 0  # search hits dropped as nav shells or catalogue stubs
+    extract_status: str = ""
+    # Gemini Embedding 2 task prefixes actually used this round
+    query_prefix: str = ""
+    index_prefix: str = "(none)"  # documents are embedded without a prefix
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -41,6 +50,14 @@ class RoundRecord:
             lines.append(f"  {self.media_indexed:>4} documents / recordings embedded")
         if self.sources_extracted:
             lines.append(f"  {self.sources_extracted:>4} sources enriched via Parallel Extract")
+        if self.search_ms or self.extract_ms:
+            lines.append(
+                f"  Parallel   {self.search_ms:.0f} ms search, {self.extract_ms:.0f} ms extract, "
+                f"{self.results_returned} results, extract {self.extract_status or '-'}, "
+                f"{self.rejected} thin dropped"
+            )
+        if self.query_prefix:
+            lines.append(f"  embed      query prefix {self.query_prefix!r}, documents {self.index_prefix}")
         lines.append(
             f"  coverage    {self.coverage_before:.0%} -> {self.coverage_after:.0%}"
         )

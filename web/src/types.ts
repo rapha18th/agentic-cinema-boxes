@@ -74,6 +74,13 @@ export interface ResearchRun {
   conflicts?: string[];
   searches?: { objective: string; queries: string[] }[];
   next_action?: string;
+  search_ms?: number;
+  extract_ms?: number;
+  results_returned?: number;
+  rejected?: number;
+  extract_status?: string;
+  query_prefix?: string;
+  index_prefix?: string;
 }
 
 export interface Verdict {
