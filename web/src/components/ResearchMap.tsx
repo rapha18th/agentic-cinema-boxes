@@ -176,6 +176,7 @@ function MapCanvas({
   const [view, setView] = useState<View>(FULL);
   const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null);
   const [panning, setPanning] = useState(false);
+  const [modFilter, setModFilter] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const drag = useRef<
     { px: number; py: number; vx: number; vy: number; w: number; h: number;
@@ -207,6 +208,21 @@ function MapCanvas({
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
+
+  // Isolating a modality from the legend recentres the map on the matching
+  // fragments, so one video or one audio clip does not stay lost among 200 dots.
+  useEffect(() => {
+    if (!modFilter) { setView(FULL); return; }
+    const hits = dots.filter((d) => (d.e.modality || "text") === modFilter);
+    if (!hits.length) return;
+    const xs = hits.map((d) => d.x), ys = hits.map((d) => d.y);
+    const pad = 70;
+    const bx = Math.min(...xs) - pad, by = Math.min(...ys) - pad;
+    const bw = Math.max(...xs) - Math.min(...xs) + pad * 2;
+    const bh = Math.max(...ys) - Math.min(...ys) + pad * 2;
+    const w = Math.max(bw, bh * (W / H));
+    setView(clampView({ x: bx + bw / 2 - w / 2, y: by + bh / 2 - (w * H / W) / 2, w, h: w * H / W }));
+  }, [modFilter, dots]);
 
   // Capturing the pointer on pointerdown makes the browser retarget the
   // following `click` to the <svg>, so a dot's own onClick never runs. Capture
@@ -263,11 +279,15 @@ function MapCanvas({
 
   return (
     <div className={`map-wrap${fullscreen ? " map-wrap-fs" : ""}`} ref={wrapRef}>
-      <div className="map-legend" aria-hidden="true">
+      <div className="map-legend" aria-label="Filter the map by modality">
         {LEGEND.map(([k, g, label]) => (
-          <span key={k} className={tally[k] ? "on" : ""}>
+          <button key={k} type="button"
+                  className={`${tally[k] ? "on" : ""}${modFilter === k ? " sel" : ""}`}
+                  disabled={!tally[k]}
+                  aria-pressed={modFilter === k}
+                  onClick={() => setModFilter((f) => (f === k ? null : k))}>
             <b>{g}</b> {label}{tally[k] ? ` ${tally[k]}` : ""}
-          </span>
+          </button>
         ))}
       </div>
       <div className="map-controls">
@@ -316,7 +336,7 @@ function MapCanvas({
         {boxes.map((b) => {
           const c = centers[b.id];
           if (!c) return null;
-          const dim = selected && selected !== b.id;
+          const dim = (selected && selected !== b.id) || !!modFilter;
           return (
             <g key={b.id} opacity={dim ? 0.25 : 1} style={{ cursor: "pointer" }}
                role="button" tabIndex={0} aria-label={`${b.name} research box`}
@@ -352,10 +372,14 @@ function MapCanvas({
           // constant on screen as the map zooms.
           const hitR = Math.max(4.5, (view.w / W) * 14);
           return dots.map((d, i) => {
-          const dim = selected && selected !== d.e.objective_id;
+          const mod = d.e.modality || "text";
+          const off = !!modFilter && mod !== modFilter;
+          const dim = (selected && selected !== d.e.objective_id) || off;
+          const picked = !!modFilter && mod === modFilter;
           const conflicted = conflictIds?.has(d.e.id);
           const label = `${d.e.title || d.e.modality || "evidence"}${conflicted ? " · cross-examined" : ""}${d.director ? " · your upload" : ""}`;
-          const hit = <circle cx={d.x} cy={d.y} r={hitR} fill="none" pointerEvents="all" />;
+          const hit = <circle cx={d.x} cy={d.y} r={hitR} fill="none"
+                              pointerEvents={off ? "none" : "all"} />;
           const ring = conflicted ? (
             <circle cx={d.x} cy={d.y} r={d.isImg ? 12 : 6} fill="none"
                     stroke="var(--device-red)" strokeWidth={1.4} opacity={0.92} pointerEvents="none">
@@ -379,26 +403,34 @@ function MapCanvas({
             },
           };
           if (d.isImg) {
+            const s = picked ? 15 : 9;
             return (
               <g key={i} {...common}>
                 {hit}
                 {ring}
-                <image href={d.thumb} x={d.x - 9} y={d.y - 9} width={18} height={18}
+                <image href={d.thumb} x={d.x - s} y={d.y - s} width={s * 2} height={s * 2}
                        clipPath={`url(#c-${d.e.id})`} preserveAspectRatio="xMidYMid slice"
                        filter="url(#map-glow)" />
-                <circle cx={d.x} cy={d.y} r={9} fill="none" stroke={d.color} strokeWidth={1.4} pointerEvents="none" />
+                <circle cx={d.x} cy={d.y} r={s} fill="none" stroke={d.color} strokeWidth={1.4} pointerEvents="none" />
               </g>
             );
           }
           if (d.glyph) {
             // Audio, video, and PDF fragments carry a filled marker in the box
             // colour with a soft glow, so the multimodal payoff reads at a glance.
+            const r = picked ? 10 : 6.4;
             return (
               <g key={i} {...common} filter="url(#map-glow)">
                 {hit}
                 {ring}
-                <circle cx={d.x} cy={d.y} r={6.4} fill={d.color} opacity={0.95} pointerEvents="none" />
-                <text x={d.x} y={d.y + 3.1} textAnchor="middle" fontSize={8.5}
+                {picked && (
+                  <circle cx={d.x} cy={d.y} r={r + 5} fill="none" stroke={d.color} strokeWidth={1.4}>
+                    <animate attributeName="r" values={`${r + 3};${r + 9};${r + 3}`} dur="1.8s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.8s" repeatCount="indefinite" />
+                  </circle>
+                )}
+                <circle cx={d.x} cy={d.y} r={r} fill={d.color} opacity={0.95} pointerEvents="none" />
+                <text x={d.x} y={d.y + r * 0.48} textAnchor="middle" fontSize={picked ? 12 : 8.5}
                       fill="var(--map-edge)" fontWeight={700} pointerEvents="none">{d.glyph}</text>
               </g>
             );

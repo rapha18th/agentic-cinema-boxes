@@ -341,7 +341,8 @@ export function EvidenceTab({
                      onSelect={setSelBox} onOpenEvidence={onOpen} conflictIds={conflictIds} />
         <p className="muted map-caption">
           One Gemini Embedding 2 space holds every modality. Position is distance in
-          meaning to the box centre. Contradicted fragments carry a ring.
+          meaning to the box centre. Contradicted fragments carry a ring. Click a
+          modality in the legend to isolate it.
         </p>
         <div className="boxwrap">
           {[...fboxes].sort((a, b) => (a.score ?? 0) - (b.score ?? 0)).map((b) => {

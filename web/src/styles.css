@@ -659,8 +659,14 @@ button.verdict-side:hover { border-color: var(--line-strong); }
 .map-legend { position: absolute; left: 8px; bottom: 8px; z-index: 2; display: flex; flex-wrap: wrap;
   gap: 4px 10px; max-width: calc(100% - 80px); padding: 6px 9px; border-radius: 4px;
   background: color-mix(in srgb, var(--map-bg) 82%, transparent); border: 1px solid var(--map-grid); }
-.map-legend span { font: 9px var(--mono); letter-spacing: .06em; color: var(--map-ink); opacity: .35; }
-.map-legend span.on { opacity: .95; }
+.map-legend button { font: 9px var(--mono); letter-spacing: .06em; color: var(--map-ink);
+  opacity: .35; background: none; border: 0; padding: 2px 4px; border-radius: 3px;
+  cursor: pointer; text-transform: none; }
+.map-legend button.on { opacity: .95; }
+.map-legend button.on:hover { background: color-mix(in srgb, var(--map-accent) 16%, transparent); }
+.map-legend button:disabled { cursor: default; }
+.map-legend button.sel { opacity: 1; background: var(--map-accent); color: var(--map-edge); }
+.map-legend button.sel b { color: var(--map-edge); }
 .map-legend b { font-size: 11px; color: var(--map-accent); }
 .map-fullscreen .map-legend { left: 20px; bottom: 20px; }
 .map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 4px;
