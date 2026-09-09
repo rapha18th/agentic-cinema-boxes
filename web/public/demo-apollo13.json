@@ -4626,7 +4626,7 @@
       "license_note": "NASA, public domain",
       "source_tier": "web",
       "quality_score": 0.58,
-      "image_url": "",
+      "image_url": "/demo-media/apollo13-poster.jpg",
       "media_url": "/demo-media/apollo13-video.webm",
       "media_mime": "video/webm",
       "media_trimmed": true,

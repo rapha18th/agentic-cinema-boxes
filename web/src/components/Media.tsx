@@ -30,13 +30,14 @@ export function MediaBit({ e, size = "thumb" }: { e: Ev; size?: "thumb" | "full"
     return <span className="media-wrap"><audio className="ev-audio" controls preload="metadata" src={src} /><More /></span>;
   }
   if (m === "video" && src) {
-    // The #t fragment makes the browser seek to and paint an early frame, so
-    // the player shows a still instead of a black box before the first play.
-    const vsrc = src.includes("#") ? src : `${src}#t=3`;
+    // A poster keeps the player from showing a black box before the first play;
+    // fall back to a #t fragment that seeks to an early frame when there is none.
+    const poster = e.image_url && e.image_url !== src ? e.image_url : undefined;
+    const vsrc = poster || src.includes("#") ? src : `${src}#t=3`; // seek-to-frame only without a poster
     return (
       <span className="media-wrap">
         <video className={size === "full" ? "ev-video-full" : "ev-video"} controls
-               preload="metadata" playsInline src={vsrc} />
+               preload="metadata" playsInline poster={poster} src={vsrc} />
         <More />
       </span>
     );
