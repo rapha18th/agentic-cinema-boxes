@@ -7,6 +7,7 @@ and Cloud Storage.
 
 from __future__ import annotations
 
+import base64
 import json
 import io
 import os
@@ -34,6 +35,7 @@ from boxes.depth import get as get_depth  # noqa: E402
 from boxes.embeddings import embed_texts, embed_parts, image_part, TASK_SEARCH  # noqa: E402
 from boxes.evidence import Evidence  # noqa: E402
 from boxes import prior_art as prior_art_mod  # noqa: E402
+from boxes import parallel_search as ps_mod  # noqa: E402
 from boxes import qa as qa_mod  # noqa: E402
 from boxes import synthesis as synthesis_mod  # noqa: E402
 
@@ -134,6 +136,7 @@ def project_report(pid: str, uid: str = Depends(auth.current_uid)) -> Response:
         runs=store.list_runs(uid, pid),
         reel=store.get_reel(uid, pid),
         prior_art=store.get_prior_art(uid, pid),
+        deep_dive=store.get_deep_dive(uid, pid),
     )
     stub = "-".join(
         "".join(c if c.isalnum() else " " for c in (p.get("premise") or "boxes")).split()
@@ -180,6 +183,8 @@ def _persist_event(uid: str, pid: str, ev: dict, run_id: str = "") -> None:
         store.set_project_status(uid, pid, progress={k: v for k, v in ev.items() if k != "type"})
         if run_id:
             store.touch_run(uid, pid, run_id)
+    elif t == "task_dive":
+        store.set_deep_dive(uid, pid, ev["result"])
     elif t == "stop":
         store.set_project_status(uid, pid, status="done", stop_reason=ev["reason"])
 
@@ -223,6 +228,11 @@ def _run_stream(uid: str, pid: str, premise: str, depth: str, run_id: str):
         try:
             beats = reel_mod.build_reel(premise, proj.evidence)
             store.set_reel(uid, pid, [b.to_dict() for b in beats])
+        except Exception:  # noqa: BLE001, S110
+            pass
+        try:
+            if getattr(proj, "deep_dive", None):
+                store.set_deep_dive(uid, pid, proj.deep_dive)
         except Exception:  # noqa: BLE001, S110
             pass
         try:
@@ -334,6 +344,26 @@ def get_prior_art(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
 # --------------------------------------------------------------------------- #
 # ask the index
 # --------------------------------------------------------------------------- #
+def _match(row: dict, score: float) -> dict:
+    return {
+        "id": row.get("id", ""),
+        "score": round(float(score), 3),
+        "text": (row.get("text") or "")[:800],
+        "citation": _cite(row),
+        "url": row.get("url", ""),
+        "image_url": row.get("image_url", ""),
+        "media_url": row.get("media_url", ""),
+        "media_mime": row.get("media_mime", ""),
+        "modality": row.get("modality", "text"),
+        "source": row.get("source", "parallel"),
+        "source_domain": row.get("source_domain", ""),
+        "title": row.get("title", ""),
+        "publish_date": row.get("publish_date"),
+        "source_tier": row.get("source_tier", "web"),
+        "quality_score": row.get("quality_score", 0.0),
+    }
+
+
 @app.post("/api/projects/{pid}/ask")
 def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
     question = (body.get("question") or "").strip()
@@ -344,34 +374,95 @@ def ask(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
         raise HTTPException(409, "no research yet")
     mat = np.asarray([r["vector768"] for r in rows], dtype=np.float32)
     mat /= np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9
-    qv = np.asarray(embed_texts([question], dim=768, prefix=TASK_SEARCH)[0], dtype=np.float32)
+
+    # An optional reference image rides in the same call. Gemini Embedding 2 takes
+    # the image and the question as one interleaved input and returns one vector,
+    # so retrieval stays in the same 768-d space as every indexed fragment.
+    img_b64 = body.get("image_b64")
+    query_parts = ["text"]
+    if img_b64:
+        try:
+            parts = [
+                types.Part(text=TASK_SEARCH + question),
+                image_part(base64.b64decode(img_b64), body.get("image_mime") or "image/jpeg"),
+            ]
+            qv = np.asarray(embed_parts(parts, dim=768), dtype=np.float32)
+            query_parts = ["text", "image"]
+        except Exception:
+            qv = np.asarray(embed_texts([question], dim=768, prefix=TASK_SEARCH)[0], dtype=np.float32)
+    else:
+        qv = np.asarray(embed_texts([question], dim=768, prefix=TASK_SEARCH)[0], dtype=np.float32)
     qv /= np.linalg.norm(qv) + 1e-9
+
     sims = mat @ qv
     order = np.argsort(-sims)[: min(8, max(3, int(body.get("k", 6))))]
-    matches = [
-            {
-                "id": rows[i].get("id", ""),
-                "score": round(float(sims[i]), 3),
-                "text": rows[i]["text"][:800],
-                "citation": _cite(rows[i]),
-                "url": rows[i].get("url", ""),
-                "image_url": rows[i].get("image_url", ""),
-                "media_url": rows[i].get("media_url", ""),
-                "media_mime": rows[i].get("media_mime", ""),
-                "modality": rows[i].get("modality", "text"),
-                "source": rows[i].get("source", "parallel"),
-                "source_domain": rows[i].get("source_domain", ""),
-                "title": rows[i].get("title", ""),
-                "publish_date": rows[i].get("publish_date"),
-                "source_tier": rows[i].get("source_tier", "web"),
-                "quality_score": rows[i].get("quality_score", 0.0),
-            }
-            for i in order
-        ]
+    matches = [_match(rows[i], sims[i]) for i in order]
     grounded = qa_mod.answer(question, matches, [m["score"] for m in matches])
     cited = grounded.pop("cited_indices")
     sources = [matches[i - 1] for i in cited]
-    return {**grounded, "sources": sources, "matches": matches}
+    return {
+        **grounded, "sources": sources, "matches": matches,
+        "query_prefix": TASK_SEARCH, "query_parts": query_parts,
+    }
+
+
+@app.post("/api/projects/{pid}/similar")
+def similar(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
+    """Rank the archive against one fragment's own stored vector. Any modality
+    can be the probe, so a still finds a paragraph and a clip finds a document."""
+    eid = (body.get("evidence_id") or "").strip()
+    if not eid:
+        raise HTTPException(400, "evidence_id required")
+    rows = [r for r in store.list_evidence(uid, pid) if r.get("vector768")]
+    idx = next((i for i, r in enumerate(rows) if r.get("id") == eid), None)
+    if idx is None:
+        raise HTTPException(409, "no vector for this fragment yet")
+    mat = np.asarray([r["vector768"] for r in rows], dtype=np.float32)
+    mat /= np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9
+    sims = mat @ mat[idx]
+    sims[idx] = -2.0  # never return the probe itself
+    k = min(12, max(3, int(body.get("k", 8))))
+    order = [i for i in np.argsort(-sims)[:k] if sims[i] > 0]
+    return {
+        "source_id": eid,
+        "source_modality": rows[idx].get("modality", "text"),
+        "matches": [_match(rows[i], sims[i]) for i in order],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Monitor: keep watching this topic after the run (Parallel Monitor, pull model)
+# --------------------------------------------------------------------------- #
+@app.post("/api/projects/{pid}/watch")
+def watch(pid: str, body: dict, uid: str = Depends(auth.current_uid)) -> dict:
+    p = store.get_project(uid, pid)
+    if not p:
+        raise HTTPException(404, "not found")
+    if body.get("enabled"):
+        q = (p.get("premise") or "").strip()
+        res = ps_mod.monitor_start(q, frequency=body.get("frequency", "1d"))
+        if res.get("monitor_id"):
+            store.set_project_status(uid, pid, monitor_id=res["monitor_id"],
+                                     watch_enabled=True, watch_since=time.time())
+        return res
+    mid = p.get("monitor_id")
+    if mid:
+        ps_mod.monitor_stop(mid)
+    store.set_project_status(uid, pid, watch_enabled=False)
+    return {"status": "stopped"}
+
+
+@app.get("/api/projects/{pid}/watch")
+def watch_state(pid: str, uid: str = Depends(auth.current_uid)) -> dict:
+    p = store.get_project(uid, pid)
+    if not p:
+        raise HTTPException(404, "not found")
+    mid = p.get("monitor_id")
+    return {
+        "enabled": bool(p.get("watch_enabled")),
+        "since": p.get("watch_since"),
+        "updates": ps_mod.monitor_updates(mid) if (mid and p.get("watch_enabled")) else [],
+    }
 
 
 def _cite(row: dict) -> str:

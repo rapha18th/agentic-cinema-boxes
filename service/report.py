@@ -240,7 +240,7 @@ def _cite_key(e: dict) -> str:
 
 def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
                      verdicts: list[dict], runs: list[dict], reel: list[dict],
-                     prior_art: dict | None = None) -> bytes:
+                     prior_art: dict | None = None, deep_dive: dict | None = None) -> bytes:
     premise = (project.get("premise") or "").strip()
     story: list = []
 
@@ -429,6 +429,23 @@ def build_report_pdf(*, project: dict, boxes: list[dict], evidence: list[dict],
                     block.append(_p(f"→ {a['prompt']}", _META))
                 story.append(_pullquote(block))
                 story.append(Spacer(1, 4))
+
+    # ---- deep dive: one Parallel Task API pass ----------------------------
+    if deep_dive and (deep_dive.get("text") or "").strip():
+        story.append(PageBreak())
+        story.append(_p("DEEP DIVE", _H))
+        story.append(_p(
+            "One Parallel Task API pass on the real history, run alongside the "
+            "loop's own sweep. Answered with its own citations.", _INTRO))
+        story.append(_rule())
+        for para in deep_dive["text"].split("\n"):
+            if para.strip():
+                story.append(_p(para.strip(), _BODY))
+        cites = deep_dive.get("citations") or []
+        if cites:
+            story.append(Spacer(1, 4))
+            story.append(_p_lines(
+                ["• " + (c.get("title") or c.get("url") or "") for c in cites[:12]], _META))
 
     # ---- research log: the process trail, last ------------------------------
     story.append(PageBreak())

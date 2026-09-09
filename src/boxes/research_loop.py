@@ -44,6 +44,7 @@ class ResearchProject:
     contradictions: list[contradiction.Verdict] = field(default_factory=list)
     reports: list[coverage.CoverageReport] = field(default_factory=list)
     ledger: Ledger = field(default_factory=Ledger)
+    deep_dive: dict | None = None  # one Parallel Task API pass, kubrick depth only
 
     @property
     def confidence(self) -> float:
@@ -135,7 +136,31 @@ def run(premise: str, *, depth: str | Depth = "scout", on_event: EventFn = _noop
     if d.name != "scout":
         _probe_disputes(proj, on_event=on_event, progress=progress)
 
+    if d.name == "kubrick":
+        _deep_dive(proj, on_event=on_event, progress=progress)
+
     return proj
+
+
+def _deep_dive(proj: ResearchProject, *, on_event: EventFn, progress) -> None:
+    """The deepest depth gets one Parallel Task API pass: a single focused
+    research question answered with its own citations, run alongside the loop's
+    own sweep. Never blocks the return; a failure just omits the section."""
+    progress("deep dive", round=len(proj.ledger.rounds))
+    question = (
+        f"For a film in development with this premise: {proj.premise}\n"
+        "Give a rigorous research brief on the real history. State the scholarly "
+        "consensus, the specific points still disputed, the strongest primary "
+        "sources, and what a production designer or writer most often gets wrong."
+    )
+    try:
+        res = ps.task_deep_dive(question)
+    except Exception:  # noqa: BLE001
+        res = None
+    if not res or not res.get("text"):
+        return
+    proj.deep_dive = res
+    on_event({"type": "task_dive", "result": res})
 
 
 def _probe_disputes(proj: ResearchProject, *, on_event: EventFn, progress) -> None:

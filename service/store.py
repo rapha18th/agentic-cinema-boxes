@@ -283,6 +283,15 @@ def get_prior_art(uid: str, pid: str) -> dict | None:
     return snap.to_dict() if snap.exists else None
 
 
+def set_deep_dive(uid: str, pid: str, data: dict) -> None:
+    _proj_ref(uid, pid).collection("meta").document("deep_dive").set(data)
+
+
+def get_deep_dive(uid: str, pid: str) -> dict | None:
+    snap = _proj_ref(uid, pid).collection("meta").document("deep_dive").get()
+    return snap.to_dict() if snap.exists else None
+
+
 # --------------------------------------------------------------------------- #
 # files
 # --------------------------------------------------------------------------- #

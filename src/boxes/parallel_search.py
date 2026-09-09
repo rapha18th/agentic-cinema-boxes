@@ -21,6 +21,7 @@ Contracts (Parallel API v1):
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -691,3 +692,88 @@ def _stub(query: str, n: int) -> list[SearchHit]:
         )
         for i in range(min(n, 3))
     ]
+
+
+# ----------------------------------------------------------------------------- #
+# Task API: one deep, traceable research pass for the deepest depth
+# ----------------------------------------------------------------------------- #
+_TASK_PROCESSOR = os.environ.get("BOXES_TASK_PROCESSOR", "core")
+
+
+def task_deep_dive(question: str, *, wait_s: int = 240) -> dict | None:
+    """Run one Parallel Task API job on a focused question and return its written
+    answer plus citations. Task is built for multi-step research, so the deepest
+    depth gets one. Returns None on any failure or timeout; never raises."""
+    key = config.parallel_api_key()
+    client = _client(key)
+    if client is None or not question.strip():
+        return None
+    try:
+        run = client.task_run.create(input=question.strip(), processor=_TASK_PROCESSOR)
+        res = client.task_run.result(run.run_id, api_timeout=wait_s)
+        out = res.output
+        content = out.content
+        if isinstance(content, dict):
+            content = content.get("output") or content.get("answer") or next(
+                (v for v in content.values() if isinstance(v, str)), ""
+            )
+        text = str(content or "")
+        cites: list[dict] = []
+        for fb in (getattr(out, "basis", None) or []):
+            for c in (getattr(fb, "citations", None) or []):
+                url = getattr(c, "url", "") or ""
+                if url and url not in {x["url"] for x in cites}:
+                    cites.append({"url": url, "title": getattr(c, "title", "") or url})
+        return {"text": text.strip(), "citations": cites, "processor": _TASK_PROCESSOR}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ----------------------------------------------------------------------------- #
+# Monitor API: keep watching a topic after the run finishes (pull model)
+# ----------------------------------------------------------------------------- #
+def monitor_start(query: str, *, frequency: str = "1d") -> dict:
+    """Create a Parallel Monitor on a research question. Returns
+    {"monitor_id": ...} or {"status": "unavailable"} when the API is not
+    reachable on this key."""
+    client = _client(config.parallel_api_key())
+    if client is None or not query.strip():
+        return {"status": "unavailable"}
+    try:
+        m = client.monitor.create(
+            frequency=frequency, type="event_stream",
+            settings={"query": query.strip()}, processor="lite",
+        )
+        return {"monitor_id": m.monitor_id, "status": getattr(m, "status", "active"),
+                "frequency": frequency}
+    except Exception:  # noqa: BLE001
+        return {"status": "unavailable"}
+
+
+def monitor_updates(monitor_id: str, *, limit: int = 20) -> list[dict]:
+    client = _client(config.parallel_api_key())
+    if client is None or not monitor_id:
+        return []
+    try:
+        page = client.monitor.events(monitor_id, limit=limit)
+        out: list[dict] = []
+        for e in (getattr(page, "events", None) or getattr(page, "data", None) or []):
+            out.append({
+                "type": getattr(e, "type", ""),
+                "at": str(getattr(e, "created_at", "") or ""),
+                "summary": (getattr(e, "message", "") or getattr(e, "summary", "") or "")[:400],
+            })
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def monitor_stop(monitor_id: str) -> bool:
+    client = _client(config.parallel_api_key())
+    if client is None or not monitor_id:
+        return False
+    try:
+        client.monitor.cancel(monitor_id)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
