@@ -170,16 +170,28 @@ def _pullquote(flowables: list) -> Table:
 
 def _fetch_thumb(url: str, *, w: float = 36 * mm) -> RLImage | None:
     """Best-effort: a department moodboard is worth a slow fetch, not a broken
-    report. Any failure just drops that one thumbnail."""
+    report. Any failure just drops that one thumbnail. The image is downscaled
+    to a thumbnail before it goes into the PDF so the dossier stays small."""
     try:
         r = httpx.get(url, timeout=6.0, follow_redirects=True)
         r.raise_for_status()
         if len(r.content) > 8_000_000:
             return None
-        reader = ImageReader(io.BytesIO(r.content))
-        iw, ih = reader.getSize()
+        try:
+            from PIL import Image as _PILImage
+
+            im = _PILImage.open(io.BytesIO(r.content))
+            im = im.convert("RGB")
+            im.thumbnail((360, 360))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=72)
+            data = buf.getvalue()
+            iw, ih = im.size
+        except Exception:  # noqa: BLE001
+            data = r.content
+            iw, ih = ImageReader(io.BytesIO(data)).getSize()
         h = w * (ih / iw) if iw else w
-        return RLImage(io.BytesIO(r.content), width=w, height=h)
+        return RLImage(io.BytesIO(data), width=w, height=h)
     except Exception:  # noqa: BLE001
         return None
 

@@ -67,6 +67,12 @@ def main() -> None:
     ]
     d["unresolved_contradictions"] = sum(1 for v in d["verdicts"] if v["relation"] == "contradicts")
 
+    # A run's conflict strings mirror the verdicts. If a verdict was dropped
+    # above, drop its line from the ledger too.
+    kept_conflicts = {f"{v['a_cite']}  vs  {v['b_cite']}" for v in d["verdicts"]}
+    for r in d.get("runs", []):
+        r["conflicts"] = [c for c in (r.get("conflicts") or []) if c in kept_conflicts]
+
     for b in d["boxes"]:
         mine = [e for e in d["evidence"] if e.get("objective_id") == b["id"]]
         b["evidence_count"] = len(mine)
