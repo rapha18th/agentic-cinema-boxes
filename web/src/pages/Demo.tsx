@@ -10,10 +10,13 @@ import type { Evidence, ResearchBox, ResearchRun, Verdict } from "../types";
 
 interface Snapshot {
   premise: string; title: string; depth: string; overview: string; stop_reason: string;
-  confidence: number; coverage: number; unresolved_contradictions: number;
+  confidence: number; coverage: number; unresolved_contradictions: number; generated_at?: number;
   boxes: ResearchBox[]; evidence: Evidence[]; runs: ResearchRun[]; verdicts: Verdict[];
   prior_art: any; reel: any[]; emergent_boxes: string[];
 }
+
+const slug = (s: string) =>
+  s.replace(/[^a-z0-9]+/gi, "-").replace(/(^-|-$)/g, "").toLowerCase().slice(0, 48);
 
 export function Demo() {
   const [S, setS] = useState<Snapshot | null>(null);
@@ -54,6 +57,8 @@ export function Demo() {
   const domainCount = new Set(S.evidence.map((e) => e.source_domain).filter(Boolean)).size;
   const openRisks = S.unresolved_contradictions + S.boxes.filter((b) => (b.score ?? 0) < 0.65).length;
   const goto = (t: TabId, boxId?: string) => { setTab(t); if (boxId !== undefined) setSelBox(boxId); };
+  const dossierName = `${slug(S.premise)}-${new Date((S.generated_at ?? Date.now() / 1000) * 1000)
+    .toISOString().slice(0, 10)}.pdf`;
 
   return (
     <div className="wrap workspace">
@@ -72,8 +77,26 @@ export function Demo() {
         </div>
         <div className="hero-actions">
           <Link className="primary-link" to="/">Build your own</Link>
-          <a className="ghost" href="/demo-dossier.pdf" download>Download dossier</a>
+          <a className="ghost" href="/demo-dossier.pdf" download={dossierName}>Download dossier</a>
         </div>
+      </section>
+
+      <section className="impact-strip">
+        <p className="impact-lead">
+          Kubrick's team filled about a thousand boxes over months in libraries and
+          archives. THE BOXES builds the same pile overnight, from a phone.
+        </p>
+        <blockquote className="impact-quote">
+          "I must have gone through several hundred books on the subject, broken it
+          down into categories on everything from his food tastes to the weather on
+          the day of a specific battle, and cross-indexed all the data in a
+          comprehensive research file."
+          <cite>Stanley Kubrick on researching Napoleon, to Joseph Gelmis, 1970</cite>
+        </blockquote>
+        <p className="muted">
+          For directors, production designers, writers, and researchers in development
+          and pre-production.
+        </p>
       </section>
 
       <div className="metric-grid" aria-label="Research summary">
@@ -122,6 +145,22 @@ export function Demo() {
           selBox={selBox} setSelBox={setSelBox}
           dept={dept} setDept={setDept}
           onOpen={setModalEv} conflicts={conflicts}
+          uploadSlot={
+            <section className="card upload-card">
+              <div className="section-head">
+                <div><p className="eyebrow">Add your own reference</p>
+                  <h2 className="display-heading small">Bring your own material into the evidence space</h2></div>
+              </div>
+              <div className="upload-row">
+                <select disabled><option>file under: a research box</option></select>
+                <input type="file" disabled />
+              </div>
+              <p className="muted">
+                On a signed-in project, drop a script page, a still, or a PDF here. It
+                embeds in the same 768-d space as the agent's findings, up to 12 MB.
+              </p>
+            </section>
+          }
         />
       )}
 

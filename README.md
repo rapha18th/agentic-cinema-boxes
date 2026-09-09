@@ -74,9 +74,8 @@ already in progress. The stale-after window releases a lease whose worker died.
 
 On request, THE BOXES surveys existing films for a similar premise. TMDB
 supplies the candidate pool through its free developer API; IMDb licenses
-its data as an enterprise product on AWS Data Exchange. One Parallel Search
-pass broadens past TMDB's own tagging, and Gemini Embedding 2 ranks every
-candidate against the premise by meaning, so a heist "without entering the
+its data as an enterprise product on AWS Data Exchange. Gemini Embedding 2 ranks
+every candidate against the premise by meaning, so a heist "without entering the
 vault" finds its real neighbours whatever genre tag it carries. Gemini then
 reads the closest films and states which angles none of them take, always
 naming which titles that claim was checked against. Originality is claimed
@@ -147,7 +146,7 @@ and expected output.
 | Agent | A custom Google ADK `BaseAgent` is the production workflow entry point on Cloud Run; the conversational ADK tool surface uses the same loop |
 | Reasoning | Gemini 3.8 Flash (`gemini-3.8-flash`, GA 2 September 2026), Vertex AI `global` location |
 | Acquisition | Parallel **Search** + **Extract** APIs, called on the hot path in every round |
-| Prior art | TMDB for the candidate pool, Parallel Search to broaden past its tagging |
+| Prior art | TMDB for the candidate pool, Gemini Embedding 2 to rank by meaning |
 | Embeddings | Gemini Embedding 2 (`gemini-embedding-2`), natively multimodal, using a normalized 768-dimensional index stored separately from browser-facing evidence metadata |
 | Frontend | Vite + React, Firebase Hosting |
 | Auth | Firebase Authentication (Google), one isolated project subtree per user |
@@ -171,7 +170,7 @@ src/boxes/
   media.py            ffmpeg trims audio/video to a short clip
   coverage.py         per-objective coverage + research completeness + stopping rule
   contradiction.py    embedding candidate pairs, Gemini verdicts, verified concurrently
-  prior_art.py        TMDB + Parallel candidate pool, embedding-ranked, Gemini positioning
+  prior_art.py        TMDB candidate pool, embedding-ranked, Gemini positioning
   synthesis.py        plain-language narrative for the PDF report, box by box
   depth.py            scout / production / kubrick presets
   ledger.py           the per-round research ledger
@@ -208,8 +207,7 @@ Gemini 3.x and Gemini Embedding 2 are served on the Vertex `global` location, so
 `GOOGLE_CLOUD_LOCATION=global`. The Parallel key goes in `.env` as
 `PARALLEL_API_KEY`, or in Secret Manager under the same name. `TMDB_API_KEY`
 is optional and takes TMDB's v3 API key; the longer v4 read access token will
-not authenticate. Without it, prior art still runs on Parallel Search alone,
-with a thinner pool.
+not authenticate. Without it, the prior-art survey returns an empty report.
 
 ```bash
 python scripts/probe_access.py           # confirm model access

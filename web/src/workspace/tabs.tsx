@@ -135,6 +135,7 @@ export function EvidenceCards({
                   ? <a href={e.url} target="_blank" rel="noopener">{cite(e) || e.url}</a>
                   : cite(e)}
                 {e.source === "director" ? " · your upload" : ""}
+                {e.modality && e.modality !== "text" && e.license_note ? ` · ${e.license_note}` : ""}
               </div>
             </div>
           );
@@ -337,6 +338,10 @@ export function EvidenceTab({
         )}
         <ResearchMap boxes={fboxes} evidence={fev} selected={selBox}
                      onSelect={setSelBox} onOpenEvidence={onOpen} conflictIds={conflictIds} />
+        <p className="muted map-caption">
+          One Gemini Embedding 2 space holds every modality. Position is distance in
+          meaning to the box centre. Contradicted fragments carry a ring.
+        </p>
         <div className="boxwrap">
           {[...fboxes].sort((a, b) => (a.score ?? 0) - (b.score ?? 0)).map((b) => {
             const c = evidence.filter((e) => e.objective_id === b.id).length;

@@ -135,11 +135,14 @@ def project_report(pid: str, uid: str = Depends(auth.current_uid)) -> Response:
         reel=store.get_reel(uid, pid),
         prior_art=store.get_prior_art(uid, pid),
     )
-    stub = "".join(c if c.isalnum() else "-" for c in (p.get("premise") or "boxes"))[:40].strip("-")
+    stub = "-".join(
+        "".join(c if c.isalnum() else " " for c in (p.get("premise") or "boxes")).split()
+    ).lower()[:48].strip("-")
+    fname = f"{stub or pid}-{time.strftime('%Y-%m-%d')}.pdf"
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="the-boxes-{stub or pid}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
 

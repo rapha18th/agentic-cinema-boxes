@@ -30,9 +30,9 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
           </button>
         </div>
         <div className="landing-proof" aria-label="Example dossier contents">
-          <span><b>203</b> cited fragments</span>
+          <span><b>174</b> cited fragments</span>
           <span><b>11</b> research boxes</span>
-          <span><b>40</b> films compared</span>
+          <span><b>54</b> films compared</span>
         </div>
       </div>
       <p className="landing-foot">Agentic Cinema hackathon · Parallel track</p>

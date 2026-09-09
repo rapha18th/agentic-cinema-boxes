@@ -290,6 +290,14 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .status-pill.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .status-pill.researching { color: var(--accent); }
 .judge-pill { color: var(--accent); }
+.impact-strip { margin: 0 0 22px; padding: 20px 22px; border: 1px solid var(--line);
+  border-left: 2px solid var(--accent); border-radius: 4px; background: var(--surface); }
+.impact-strip .impact-lead { margin: 0; max-width: 70ch; font: 300 18px/1.55 var(--sans); color: var(--text); }
+.impact-strip .impact-quote { margin: 14px 0 12px; padding-left: 16px; border-left: 1px solid var(--line);
+  max-width: 74ch; font: italic 300 15px/1.6 var(--sans); color: var(--muted); }
+.impact-strip .impact-quote cite { display: block; margin-top: 8px; font: 10px/1.4 var(--mono);
+  letter-spacing: .06em; font-style: normal; text-transform: uppercase; color: var(--muted); }
+.impact-strip .muted { margin: 0; font-size: 13px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line);
   border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); }
 .metric { display: grid; padding: 16px 18px; min-width: 0; }
@@ -521,7 +529,10 @@ button.verdict-side:hover { border-color: var(--line-strong); }
   padding-top: 2px; }
 .ev-row-cite { font: 11px var(--mono); color: var(--link); }
 .ev-row-snip { grid-column: 2; font-size: 11px; color: var(--muted); line-height: 1.5;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ev-row-src { grid-column: 2; justify-self: start; margin-top: 2px; font: 10px var(--mono);
+  letter-spacing: .04em; color: var(--accent); text-decoration: none; }
+.ev-row-src:hover { text-decoration: underline; }
 
 /* ── media ────────────────────────────────────────────────────────── */
 .ev-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 3px;
@@ -608,6 +619,7 @@ button.verdict-side:hover { border-color: var(--line-strong); }
 
 /* ── research map ─────────────────────────────────────────────────── */
 .map-wrap { position: relative; }
+.map-caption { margin: 8px 0 0; font-size: 12px; line-height: 1.5; max-width: 62ch; }
 .map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 4px;
   background: var(--map-bg); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .map.grabbing { cursor: grabbing; }
