@@ -92,7 +92,8 @@ def main() -> None:
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # A downloadable dossier for the read-only demo, built from the same data.
-    pdf_path = p.parent / "demo-dossier.pdf"
+    pdf_path = p.parent / ("demo-dossier.pdf" if p.stem == "demo-snapshot"
+                           else f"{p.stem}-dossier.pdf")
     try:
         import report as report_mod  # noqa: PLC0415
 

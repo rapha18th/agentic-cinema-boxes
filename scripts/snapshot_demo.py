@@ -28,7 +28,7 @@ from boxes import research_loop as rl  # noqa: E402
 from boxes import synthesis as synthesis_mod  # noqa: E402
 
 DEFAULT_PREMISE = "A period drama set at MIT in 1966, the year Joseph Weizenbaum built ELIZA."
-OUT = ROOT / "web" / "public" / "demo-snapshot.json"
+PUBLIC = ROOT / "web" / "public"
 
 # Sources worth surfacing a contradiction between. A disagreement between two
 # low-authority pages is noise, not a research finding.
@@ -87,6 +87,12 @@ def semantic_coordinates(vectors: np.ndarray | None) -> list[tuple[float, float]
 
 def main() -> None:
     args = sys.argv[1:]
+    slug = "snapshot"
+    if "--slug" in args:
+        i = args.index("--slug")
+        slug = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    out = PUBLIC / (f"demo-{slug}.json" if slug != "snapshot" else "demo-snapshot.json")
     depth = args[0] if args and args[0] in ("scout", "production", "kubrick") else "scout"
     free = [a for a in args if a not in ("scout", "production", "kubrick")]
     premise = free[0] if free else DEFAULT_PREMISE
@@ -207,11 +213,11 @@ def main() -> None:
         "emergent_boxes": emergent,
     }
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"\n{'=' * 60}")
-    print(f"wrote {OUT.relative_to(ROOT)}  ({OUT.stat().st_size // 1024} KB)")
+    print(f"wrote {out.relative_to(ROOT)}  ({out.stat().st_size // 1024} KB)")
     print(f"elapsed {snapshot['elapsed_seconds']}s")
     print(f"boxes {len(boxes)}  ({len(emergent)} emergent: {', '.join(emergent) or 'none'})")
     print(f"evidence {len(ev_dicts)}  modality {by_mod}")

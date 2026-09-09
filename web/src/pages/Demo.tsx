@@ -20,7 +20,7 @@ const slug = (s: string) =>
 
 const DEMOS = [
   { slug: "eliza", label: "ELIZA · 1966", file: "/demo-snapshot.json", pdf: "/demo-dossier.pdf" },
-  { slug: "chitepo", label: "Chitepo · 1975", file: "/demo-chitepo.json", pdf: "/demo-chitepo-dossier.pdf" },
+  { slug: "apollo13", label: "Apollo 13 · 1970", file: "/demo-apollo13.json", pdf: "/demo-apollo13-dossier.pdf" },
 ];
 
 export function Demo() {
