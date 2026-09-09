@@ -378,7 +378,10 @@ function MapCanvas({
           const picked = !!modFilter && mod === modFilter;
           const conflicted = conflictIds?.has(d.e.id);
           const label = `${d.e.title || d.e.modality || "evidence"}${conflicted ? " · cross-examined" : ""}${d.director ? " · your upload" : ""}`;
-          const hit = <circle cx={d.x} cy={d.y} r={hitR} fill="none"
+          // The hit pad must never be smaller than the visible marker, or a
+          // click that lands on the glyph misses. Picked markers are the largest.
+          const visR = d.isImg ? (picked ? 15 : 9) : d.glyph ? (picked ? 19 : 6.4) : 3.5;
+          const hit = <circle cx={d.x} cy={d.y} r={Math.max(hitR, visR + 3)} fill="none"
                               pointerEvents={off ? "none" : "all"} />;
           const ring = conflicted ? (
             <circle cx={d.x} cy={d.y} r={d.isImg ? 12 : 6} fill="none"
@@ -388,9 +391,12 @@ function MapCanvas({
           ) : null;
           const common = {
             opacity: dim ? 0.15 : 1,
+            // A filtered-out dot must not steal a click from the isolated one
+            // when the two overlap, so the whole group goes inert.
+            pointerEvents: (off ? "none" : undefined) as "none" | undefined,
             style: { cursor: "pointer" },
             role: "button",
-            tabIndex: 0,
+            tabIndex: off ? -1 : 0,
             "aria-label": label,
             onMouseEnter: () => setHover({ x: d.x, y: d.y, label }),
             onMouseLeave: () => setHover(null),
