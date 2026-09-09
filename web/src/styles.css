@@ -758,9 +758,6 @@ button.verdict-side:hover { border-color: var(--line-strong); }
 .demo-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 21px;
   color: var(--landing-bg); background: var(--landing-ink); border: 1px solid var(--landing-ink);
   border-radius: 999px; text-decoration: none; font: 600 12px var(--sans); }
-.landing-proof { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px;
-  color: var(--landing-faint); font: 10px var(--mono); letter-spacing: .04em; }
-.landing-proof b { color: var(--landing-dim); }
 .landing-foot { flex: none; margin: 0; padding-top: 8px; font-size: 11px; letter-spacing: .22em;
   color: var(--landing-faint); }
 
@@ -798,7 +795,6 @@ button.verdict-side:hover { border-color: var(--line-strong); }
   .ask-compose, .upload-row { align-items: stretch; flex-direction: column; }
   .ask-compose button, .upload-row input { width: 100%; }
   .section-head { align-items: stretch; flex-direction: column; gap: 10px; }
-  .landing-proof { max-width: 260px; }
 }
 
 @media print {
