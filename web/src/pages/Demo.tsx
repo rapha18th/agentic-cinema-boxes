@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { EvidenceModal } from "../components/EvidenceModal";
 import {
@@ -18,7 +18,14 @@ interface Snapshot {
 const slug = (s: string) =>
   s.replace(/[^a-z0-9]+/gi, "-").replace(/(^-|-$)/g, "").toLowerCase().slice(0, 48);
 
+const DEMOS = [
+  { slug: "eliza", label: "ELIZA · 1966", file: "/demo-snapshot.json", pdf: "/demo-dossier.pdf" },
+  { slug: "chitepo", label: "Chitepo · 1975", file: "/demo-chitepo.json", pdf: "/demo-chitepo-dossier.pdf" },
+];
+
 export function Demo() {
+  const { slug: routeSlug } = useParams();
+  const active = DEMOS.find((d) => d.slug === routeSlug) ?? DEMOS[0];
   const [S, setS] = useState<Snapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<TabId>("overview");
@@ -27,11 +34,12 @@ export function Demo() {
   const [modalEv, setModalEv] = useState<Evidence | null>(null);
 
   useEffect(() => {
-    fetch("/demo-snapshot.json")
+    setS(null); setFailed(false); setTab("overview"); setSelBox(null); setDept(null);
+    fetch(active.file)
       .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then(setS)
       .catch(() => setFailed(true));
-  }, []);
+  }, [active.file]);
 
   const conflicts = useMemo(() => (S ? conflictMap(S.verdicts) : {}), [S]);
   const highlights = useMemo(
@@ -59,6 +67,7 @@ export function Demo() {
   const goto = (t: TabId, boxId?: string) => { setTab(t); if (boxId !== undefined) setSelBox(boxId); };
   const dossierName = `${slug(S.premise)}-${new Date((S.generated_at ?? Date.now() / 1000) * 1000)
     .toISOString().slice(0, 10)}.pdf`;
+  const dossierHref = active.pdf;
 
   return (
     <div className="wrap workspace">
@@ -77,9 +86,16 @@ export function Demo() {
         </div>
         <div className="hero-actions">
           <Link className="primary-link" to="/">Build your own</Link>
-          <a className="ghost" href="/demo-dossier.pdf" download={dossierName}>Download dossier</a>
+          <a className="ghost" href={dossierHref} download={dossierName}>Download dossier</a>
         </div>
       </section>
+
+      <nav className="demo-switch" aria-label="Example runs">
+        {DEMOS.map((d) => (
+          <Link key={d.slug} to={`/demo/${d.slug}`}
+                className={d.slug === active.slug ? "on" : ""}>{d.label}</Link>
+        ))}
+      </nav>
 
       <section className="impact-strip">
         <p className="impact-lead">

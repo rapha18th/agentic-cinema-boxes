@@ -14,6 +14,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Suspense fallback={<div className="wrap"><p className="muted">Opening THE BOXES…</p></div>}>
           <Routes>
             <Route path="/demo" element={<Demo />} />
+            <Route path="/demo/:slug" element={<Demo />} />
             <Route path="*" element={<AuthenticatedApp />} />
           </Routes>
         </Suspense>

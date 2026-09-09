@@ -290,6 +290,11 @@ input[type="file"] { padding: 7px; font-size: 12px; color: var(--muted); }
 .status-pill.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .status-pill.researching { color: var(--accent); }
 .judge-pill { color: var(--accent); }
+.demo-switch { display: flex; gap: 6px; margin: 0 0 18px; }
+.demo-switch a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); text-decoration: none; font: 11px/1 var(--mono); letter-spacing: .06em; }
+.demo-switch a:hover { color: var(--text); border-color: var(--map-tip-line); }
+.demo-switch a.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .impact-strip { margin: 0 0 22px; padding: 20px 22px; border: 1px solid var(--line);
   border-left: 2px solid var(--accent); border-radius: 4px; background: var(--surface); }
 .impact-strip .impact-lead { margin: 0; max-width: 70ch; font: 300 18px/1.55 var(--sans); color: var(--text); }
